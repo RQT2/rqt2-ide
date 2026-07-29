@@ -108,114 +108,220 @@ update_terminal_colors("dark")
 
 
 class TerminalEmulator:
-    def __init__(self):
-        self.lines = [[]]
-        self.cursor_row = 0
+    def __init__(self, rows=1000, cols=100):
+        self.rows = rows
+        self.cols = cols
+        self.clear()
         
         self.fg_color = None
         self.bg_color = None
         self.bold = False
 
+    def clear(self):
+        self.screen = [[{"char": " ", "fg": None, "bg": None, "bold": False} for _ in range(self.cols)] for _ in range(self.rows)]
+        self.cursor_row = 0
+        self.cursor_col = 0
+        self.alt_charset = False
+
     def write(self, raw_text):
         import re
+        ansi_re = re.compile(r'\x1b\[([?0-9;]*)([a-zA-Z])|\x1b\((.)|\x1b\)(.)')
         
-        # Split by cursor moves A/B, clear-lines K, and color codes m
-        tokens = re.split(r'(\x1b\[\d+[AB]|\x1b\[2?K|\x1b\[[0-9;]*m)', raw_text)
-        
-        for token in tokens:
-            if not token:
+        pos = 0
+        while pos < len(raw_text):
+            match = ansi_re.search(raw_text, pos)
+            if not match:
+                self.print_string(raw_text[pos:])
+                break
+                
+            if match.start() > pos:
+                self.print_string(raw_text[pos:match.start()])
+                
+            if match.group(2): # CSI sequence
+                params = match.group(1)
+                cmd = match.group(2)
+                self.handle_csi(params, cmd)
+            elif match.group(3) or match.group(4): # Charset
+                charset = match.group(3) or match.group(4)
+                if charset == '0':
+                    self.alt_charset = True
+                elif charset == 'B':
+                    self.alt_charset = False
+                    
+            pos = match.end()
+
+    def print_string(self, s):
+        for char in s:
+            if char == '\x0e': # SO
+                self.alt_charset = True
                 continue
-            
-            match_move = re.match(r'\x1b\[(\d+)([AB])', token)
-            match_clear = re.match(r'\x1b\[2?K', token)
-            match_color = re.match(r'\x1b\[([0-9;]*)m', token)
-            
-            if match_move:
-                val = int(match_move.group(1))
-                direction = match_move.group(2)
-                if direction == 'A':
-                    self.cursor_row = max(0, self.cursor_row - val)
-                elif direction == 'B':
-                    self.cursor_row = self.cursor_row + val
-                    while len(self.lines) <= self.cursor_row:
-                        self.lines.append([])
-            elif match_clear:
-                if self.cursor_row < len(self.lines):
-                    self.lines[self.cursor_row] = []
-            elif match_color:
-                params = match_color.group(1)
-                if not params or params == '0':
-                    self.fg_color = None
-                    self.bg_color = None
-                    self.bold = False
-                else:
-                    for part in params.split(';'):
-                        if not part:
-                            continue
-                        try:
-                            code = int(part)
-                            if code == 0:
-                                self.fg_color = None
-                                self.bg_color = None
-                                self.bold = False
-                            elif code == 1:
-                                self.bold = True
-                            elif code in COLOR_MAP:
-                                self.fg_color = COLOR_MAP[code]
-                            elif code in BG_COLOR_MAP:
-                                self.bg_color = BG_COLOR_MAP[code]
-                        except ValueError:
-                            pass
+            elif char == '\x0f': # SI
+                self.alt_charset = False
+                continue
+                
+            if char == '\n':
+                self.cursor_row += 1
+                self.cursor_col = 0
+                if self.cursor_row >= self.rows:
+                    self.scroll_up()
+            elif char == '\r':
+                self.cursor_col = 0
+            elif char == '\t':
+                self.cursor_col = (self.cursor_col + 8) & ~7
+                if self.cursor_col >= self.cols:
+                    self.cursor_col = self.cols - 1
+            elif char == '\x08' or char == '\x7f':
+                if self.cursor_col > 0:
+                    self.cursor_col -= 1
             else:
-                # Normal text
-                parts = re.split(r'(\r|\n|\r\n)', token)
-                for part in parts:
-                    if part == '\n' or part == '\r\n':
-                        self.cursor_row += 1
-                        if len(self.lines) <= self.cursor_row:
-                            self.lines.append([])
-                    elif part == '\r':
-                        if self.cursor_row < len(self.lines):
-                            self.lines[self.cursor_row] = []
-                    else:
-                        if self.cursor_row >= len(self.lines):
-                            while len(self.lines) <= self.cursor_row:
-                                self.lines.append([])
+                if self.alt_charset:
+                    LINE_DRAWING_MAP = {
+                        'q': '─', 'x': '│', 'l': '┌', 'k': '┐',
+                        'm': '└', 'j': '┘', 't': '├', 'u': '┤',
+                        'v': '┴', 'w': '┬', 'n': '┼', 'a': '▒', '~': '·'
+                    }
+                    char = LINE_DRAWING_MAP.get(char, char)
+                    
+                if self.cursor_row >= self.rows:
+                    self.scroll_up()
+                if self.cursor_col >= self.cols:
+                    self.cursor_row += 1
+                    self.cursor_col = 0
+                    if self.cursor_row >= self.rows:
+                        self.scroll_up()
                         
-                        line_segs = self.lines[self.cursor_row]
-                        # Check if last segment has the same style, if so merge text
-                        if line_segs and line_segs[-1]["fg"] == self.fg_color and line_segs[-1]["bg"] == self.bg_color and line_segs[-1]["bold"] == self.bold:
-                            line_segs[-1]["text"] += part
-                        else:
-                            line_segs.append({
-                                "text": part,
-                                "fg": self.fg_color,
-                                "bg": self.bg_color,
-                                "bold": self.bold
-                            })
+                self.screen[self.cursor_row][self.cursor_col] = {
+                    "char": char,
+                    "fg": self.fg_color,
+                    "bg": self.bg_color,
+                    "bold": self.bold
+                }
+                self.cursor_col += 1
+
+    def scroll_up(self):
+        self.screen.pop(0)
+        self.screen.append([{"char": " ", "fg": None, "bg": None, "bold": False} for _ in range(self.cols)])
+        self.cursor_row = self.rows - 1
+
+    def handle_csi(self, params, cmd):
+        parts = [int(p) for p in params.split(';') if p.isdigit()]
+        
+        if cmd == 'A':
+            n = parts[0] if parts else 1
+            self.cursor_row = max(0, self.cursor_row - n)
+        elif cmd == 'B':
+            n = parts[0] if parts else 1
+            self.cursor_row = min(self.rows - 1, self.cursor_row + n)
+        elif cmd == 'C':
+            n = parts[0] if parts else 1
+            self.cursor_col = min(self.cols - 1, self.cursor_col + n)
+        elif cmd == 'D':
+            n = parts[0] if parts else 1
+            self.cursor_col = max(0, self.cursor_col - n)
+        elif cmd in ('H', 'f'):
+            r = parts[0] - 1 if len(parts) > 0 else 0
+            c = parts[1] - 1 if len(parts) > 1 else 0
+            self.cursor_row = max(0, min(self.rows - 1, r))
+            self.cursor_col = max(0, min(self.cols - 1, c))
+        elif cmd == 'J':
+            mode = parts[0] if parts else 0
+            if mode == 2:
+                self.clear()
+        elif cmd == 'K':
+            mode = parts[0] if parts else 0
+            if mode == 0:
+                for c in range(self.cursor_col, self.cols):
+                    self.screen[self.cursor_row][c] = {"char": " ", "fg": None, "bg": None, "bold": False}
+            elif mode == 1:
+                for c in range(0, self.cursor_col + 1):
+                    self.screen[self.cursor_row][c] = {"char": " ", "fg": None, "bg": None, "bold": False}
+            elif mode == 2:
+                self.screen[self.cursor_row] = [{"char": " ", "fg": None, "bg": None, "bold": False} for _ in range(self.cols)]
+        elif cmd == 'm':
+            if not params or params == '0':
+                self.fg_color = None
+                self.bg_color = None
+                self.bold = False
+            else:
+                for part in params.split(';'):
+                    if not part:
+                        continue
+                    try:
+                        code = int(part)
+                        if code == 0:
+                            self.fg_color = None
+                            self.bg_color = None
+                            self.bold = False
+                        elif code == 1:
+                            self.bold = True
+                        elif code in COLOR_MAP:
+                            self.fg_color = COLOR_MAP[code]
+                        elif code in BG_COLOR_MAP:
+                            self.bg_color = BG_COLOR_MAP[code]
+                    except ValueError:
+                        pass
 
     def get_html(self):
         import html
         html_lines = []
-        for line in self.lines:
-            line_html = ""
-            for seg in line:
-                text = html.escape(seg["text"])
-                if not text:
-                    continue
-                styles = []
-                if seg["fg"]:
-                    styles.append(f"color: {seg['fg']};")
-                if seg["bg"]:
-                    styles.append(f"background-color: {seg['bg']};")
-                if seg["bold"]:
-                    styles.append("font-weight: bold;")
+        
+        last_non_empty_row = 0
+        for r in range(self.rows):
+            has_content = any(cell["char"] != " " for cell in self.screen[r])
+            if has_content:
+                last_non_empty_row = r
                 
+        for r in range(last_non_empty_row + 1):
+            line_html = ""
+            current_seg = []
+            current_style = None
+            
+            row_cells = self.screen[r]
+            last_non_space_col = -1
+            for c in range(self.cols - 1, -1, -1):
+                if row_cells[c]["char"] != " ":
+                    last_non_space_col = c
+                    break
+            
+            for c in range(last_non_space_col + 1):
+                cell = row_cells[c]
+                style = (cell["fg"], cell["bg"], cell["bold"])
+                if style != current_style:
+                    if current_seg:
+                        seg_text = html.escape("".join(current_seg))
+                        fg, bg, bold = current_style
+                        styles = []
+                        if fg:
+                            styles.append(f"color: {fg};")
+                        if bg:
+                            styles.append(f"background-color: {bg};")
+                        if bold:
+                            styles.append("font-weight: bold;")
+                        if styles:
+                            style_str = " ".join(styles)
+                            line_html += f'<span style="{style_str}">{seg_text}</span>'
+                        else:
+                            line_html += seg_text
+                        current_seg = []
+                    current_style = style
+                current_seg.append(cell["char"])
+                
+            if current_seg:
+                seg_text = html.escape("".join(current_seg))
+                fg, bg, bold = current_style
+                styles = []
+                if fg:
+                    styles.append(f"color: {fg};")
+                if bg:
+                    styles.append(f"background-color: {bg};")
+                if bold:
+                    styles.append("font-weight: bold;")
                 if styles:
                     style_str = " ".join(styles)
-                    line_html += f'<span style="{style_str}">{text}</span>'
+                    line_html += f'<span style="{style_str}">{seg_text}</span>'
                 else:
-                    line_html += text
+                    line_html += seg_text
+                    
             html_lines.append(line_html)
             
         body = "<br/>".join(html_lines)

@@ -1,4 +1,5 @@
 import os, subprocess, re
+from .compiler import TerminalEmulator
 from PySide6.QtCore import QObject, QSize, QThread, Signal, Qt, QTimer
 from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QFrame, QVBoxLayout, QLabel, QLineEdit, QPushButton, QCheckBox, QComboBox, QSpacerItem, QSizePolicy, QFileDialog
 from PySide6.QtGui import QIcon, QTextCursor
@@ -14,146 +15,7 @@ except Exception:
     from rqtll_widgets.utils.icon_loader import _resolve_icon
 
 
-class VirtualTerminal:
-    LINE_DRAWING_MAP = {
-        'q': '─',
-        'x': '│',
-        'l': '┌',
-        'k': '┐',
-        'm': '└',
-        'j': '┘',
-        't': '├',
-        'u': '┤',
-        'v': '┴',
-        'w': '┬',
-        'n': '┼',
-        'a': '▒',
-        '~': '·',
-    }
 
-    def __init__(self, rows=24, cols=80):
-        self.rows = rows
-        self.cols = cols
-        self.clear()
-
-    def clear(self):
-        self.screen = [[' ' for _ in range(self.cols)] for _ in range(self.rows)]
-        self.cursor_row = 0
-        self.cursor_col = 0
-        self.alt_charset = False
-
-    def write(self, text):
-        ansi_re = re.compile(r'\x1b\[([?0-9;]*)([a-zA-Z])|\x1b\((.)|\x1b\]([^\x07\x1b]*)(?:\x07|\x1b\\)|\x1b(.)')
-        pos = 0
-        while pos < len(text):
-            match = ansi_re.search(text, pos)
-            if not match:
-                self.print_string(text[pos:])
-                break
-            
-            if match.start() > pos:
-                self.print_string(text[pos:match.start()])
-            
-            if match.group(2): # CSI sequence
-                params = match.group(1)
-                cmd = match.group(2)
-                self.handle_csi(params, cmd)
-            elif match.group(3): # Character set selection ESC ( <char>
-                charset = match.group(3)
-                if charset == '0':
-                    self.alt_charset = True
-                elif charset == 'B':
-                    self.alt_charset = False
-            
-            pos = match.end()
-
-    def print_string(self, s):
-        for char in s:
-            if char == '\x0e': # SO (Shift Out) -> Select Alt Charset
-                self.alt_charset = True
-                continue
-            elif char == '\x0f': # SI (Shift In) -> Select Normal Charset
-                self.alt_charset = False
-                continue
-
-            if char == '\n':
-                self.cursor_row += 1
-                self.cursor_col = 0
-                if self.cursor_row >= self.rows:
-                    self.scroll_up()
-            elif char == '\r':
-                self.cursor_col = 0
-            elif char == '\t':
-                self.cursor_col = (self.cursor_col + 8) & ~7
-                if self.cursor_col >= self.cols:
-                    self.cursor_col = self.cols - 1
-            elif char == '\x08' or char == '\x7f':
-                if self.cursor_col > 0:
-                    self.cursor_col -= 1
-            else:
-                if self.alt_charset:
-                    char = self.LINE_DRAWING_MAP.get(char, char)
-
-                if self.cursor_row >= self.rows:
-                    self.scroll_up()
-                if self.cursor_col >= self.cols:
-                    self.cursor_row += 1
-                    self.cursor_col = 0
-                    if self.cursor_row >= self.rows:
-                        self.scroll_up()
-                
-                self.screen[self.cursor_row][self.cursor_col] = char
-                self.cursor_col += 1
-
-    def scroll_up(self):
-        self.screen.pop(0)
-        self.screen.append([' ' for _ in range(self.cols)])
-        self.cursor_row = self.rows - 1
-
-    def handle_csi(self, params, cmd):
-        parts = [int(p) for p in params.split(';') if p.isdigit()]
-        
-        if cmd == 'A':
-            n = parts[0] if parts else 1
-            self.cursor_row = max(0, self.cursor_row - n)
-        elif cmd == 'B':
-            n = parts[0] if parts else 1
-            self.cursor_row = min(self.rows - 1, self.cursor_row + n)
-        elif cmd == 'C':
-            n = parts[0] if parts else 1
-            self.cursor_col = min(self.cols - 1, self.cursor_col + n)
-        elif cmd == 'D':
-            n = parts[0] if parts else 1
-            self.cursor_col = max(0, self.cursor_col - n)
-        elif cmd == 'H' or cmd == 'f':
-            r = parts[0] - 1 if len(parts) > 0 else 0
-            c = parts[1] - 1 if len(parts) > 1 else 0
-            self.cursor_row = max(0, min(self.rows - 1, r))
-            self.cursor_col = max(0, min(self.cols - 1, c))
-        elif cmd == 'J':
-            mode = parts[0] if parts else 0
-            if mode == 2:
-                self.clear()
-        elif cmd == 'K':
-            mode = parts[0] if parts else 0
-            if mode == 0:
-                for c in range(self.cursor_col, self.cols):
-                    self.screen[self.cursor_row][c] = ' '
-            elif mode == 1:
-                for c in range(0, self.cursor_col + 1):
-                    self.screen[self.cursor_row][c] = ' '
-            elif mode == 2:
-                self.screen[self.cursor_row] = [' ' for _ in range(self.cols)]
-        elif cmd == 'm':
-            pass
-
-    def get_text(self):
-        lines = []
-        for line in self.screen:
-            lines.append("".join(line).rstrip())
-        while len(lines) > 1 and not lines[-1]:
-            lines.pop()
-        return "\n".join(lines)
 
 
 class ExecutionOutputThread(QThread):
@@ -218,7 +80,7 @@ class GzLauncherController(QObject):
         self.ui.is_connected = False
         self.ui.tab_page = self.tab_widget.widget(0)
         self.ui.session_id = f"{self.ide.ws_path}_gz_sim_0"
-        self.ui.terminal = VirtualTerminal(rows=1000, cols=100)
+        self.ui.terminal = TerminalEmulator()
         self.ui.textEdit.keyPressEvent = lambda event: self.handle_keypress(event, self.ui)
         self.tabs = [self.ui]
         
@@ -482,7 +344,7 @@ class GzLauncherController(QObject):
                     gz_sim=gz_req
                 )
                 
-                ui_inst.terminal.clear()
+                #ui_inst.terminal.clear()
                 ui_inst.textEdit.clear()
                 
                 ui_inst.thread = ExecutionOutputThread(self.ide.root.execution_stub, req_obj)
@@ -560,7 +422,7 @@ class GzLauncherController(QObject):
 
     def refresh_terminal_view(self, ui_inst):
         ui_inst.pending_update = False
-        ui_inst.textEdit.setPlainText(ui_inst.terminal.get_text())
+        ui_inst.textEdit.setHtml(ui_inst.terminal.get_html())
         
         cursor = ui_inst.textEdit.textCursor()
         cursor.movePosition(QTextCursor.End)
@@ -650,7 +512,7 @@ class GzLauncherController(QObject):
         ui_inst.is_connected = False
         ui_inst.tab_page = tab_widget
         ui_inst.session_id = f"{self.ide.ws_path}_gz_sim_{index}"
-        ui_inst.terminal = VirtualTerminal(rows=1000, cols=100)
+        ui_inst.terminal = TerminalEmulator()
         ui_inst.textEdit.keyPressEvent = lambda event: self.handle_keypress(event, ui_inst)
         
         while len(self.tabs) <= index:
