@@ -15,18 +15,112 @@ except Exception:
         def _resolve_icon(icon_dirs, path, theme=None):
             return ""
 
+COLOR_MAP = {}
+BG_COLOR_MAP = {}
+DEFAULT_FG = "#f8f8f2"
+DEFAULT_BG = "#1e1e1e"
+
+def update_terminal_colors(theme_name):
+    global COLOR_MAP, BG_COLOR_MAP, DEFAULT_FG, DEFAULT_BG
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    palette_path = os.path.join(base_dir, "external", "rqtll_components", "styles", "palette.json")
+    
+    default_fg = {
+        30: "#141417", 31: "#D62C2C", 32: "#42DD76", 33: "#FFB638",
+        34: "#28A9FF", 35: "#A95EFF", 36: "#14E5D4", 37: "#c8c8c8",
+        90: "#5b5b5f", 91: "#fc0606", 92: "#21fe9b", 93: "#ffb838",
+        94: "#28a9ff", 95: "#e66dff", 96: "#00f9e5", 97: "#fbfbfb"
+    }
+    default_bg = {
+        40: "#141417", 41: "#D62C2C", 42: "#42DD76", 43: "#FFB638",
+        44: "#28A9FF", 45: "#A95EFF", 46: "#14E5D4", 47: "#c8c8c8"
+    }
+
+    if not os.path.exists(palette_path):
+        COLOR_MAP.clear()
+        COLOR_MAP.update(default_fg)
+        BG_COLOR_MAP.clear()
+        BG_COLOR_MAP.update(default_bg)
+        if theme_name == "dark":
+            DEFAULT_FG = "#c8c8c8"
+            DEFAULT_BG = "#141417"
+        else:
+            DEFAULT_FG = "#181818"
+            DEFAULT_BG = "#f4f4f4"
+        return
+
+    try:
+        with open(palette_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            
+        themes = data.get("themes", {})
+        theme_colors = themes.get(theme_name, themes.get("dark", {}))
+        
+        DEFAULT_FG = theme_colors.get("color", "#f8f8f2")
+        DEFAULT_BG = theme_colors.get("background", "#1e1e1e")
+        
+        key_mapping = {
+            "ansi_black": (30, 40),
+            "ansi_red": (31, 41),
+            "ansi_green": (32, 42),
+            "ansi_yellow": (33, 43),
+            "ansi_blue": (34, 44),
+            "ansi_magenta": (35, 45),
+            "ansi_cyan": (36, 46),
+            "ansi_white": (37, 47),
+            "ansi_bright_black": (90, None),
+            "ansi_bright_red": (91, None),
+            "ansi_bright_green": (92, None),
+            "ansi_bright_yellow": (93, None),
+            "ansi_bright_blue": (94, None),
+            "ansi_bright_magenta": (95, None),
+            "ansi_bright_cyan": (96, None),
+            "ansi_bright_white": (97, None)
+        }
+        
+        new_fg = {}
+        new_bg = {}
+        
+        for json_key, (fg_code, bg_code) in key_mapping.items():
+            color_val = theme_colors.get(json_key)
+            if color_val:
+                new_fg[fg_code] = color_val
+                if bg_code is not None:
+                    new_bg[bg_code] = color_val
+                    
+        COLOR_MAP.clear()
+        COLOR_MAP.update(new_fg)
+        BG_COLOR_MAP.clear()
+        BG_COLOR_MAP.update(new_bg)
+    except Exception:
+        COLOR_MAP.clear()
+        COLOR_MAP.update(default_fg)
+        BG_COLOR_MAP.clear()
+        BG_COLOR_MAP.update(default_bg)
+        if theme_name == "dark":
+            DEFAULT_FG = "#c8c8c8"
+            DEFAULT_BG = "#141417"
+        else:
+            DEFAULT_FG = "#181818"
+            DEFAULT_BG = "#f4f4f4"
+
+update_terminal_colors("dark")
+
+
 class TerminalEmulator:
     def __init__(self):
-        self.lines = [""]
+        self.lines = [[]]
         self.cursor_row = 0
+        
+        self.fg_color = None
+        self.bg_color = None
+        self.bold = False
 
     def write(self, raw_text):
         import re
-        # Strip only ANSI color/formatting codes, keep cursor moves and clear-lines
-        clean_text = re.sub(r'\x1b\[[0-9;]*m', '', raw_text)
         
-        # Split by cursor moves A/B and clear-line K
-        tokens = re.split(r'(\x1b\[\d+[AB]|\x1b\[2?K)', clean_text)
+        # Split by cursor moves A/B, clear-lines K, and color codes m
+        tokens = re.split(r'(\x1b\[\d+[AB]|\x1b\[2?K|\x1b\[[0-9;]*m)', raw_text)
         
         for token in tokens:
             if not token:
@@ -34,6 +128,7 @@ class TerminalEmulator:
             
             match_move = re.match(r'\x1b\[(\d+)([AB])', token)
             match_clear = re.match(r'\x1b\[2?K', token)
+            match_color = re.match(r'\x1b\[([0-9;]*)m', token)
             
             if match_move:
                 val = int(match_move.group(1))
@@ -43,28 +138,92 @@ class TerminalEmulator:
                 elif direction == 'B':
                     self.cursor_row = self.cursor_row + val
                     while len(self.lines) <= self.cursor_row:
-                        self.lines.append("")
+                        self.lines.append([])
             elif match_clear:
                 if self.cursor_row < len(self.lines):
-                    self.lines[self.cursor_row] = ""
+                    self.lines[self.cursor_row] = []
+            elif match_color:
+                params = match_color.group(1)
+                if not params or params == '0':
+                    self.fg_color = None
+                    self.bg_color = None
+                    self.bold = False
+                else:
+                    for part in params.split(';'):
+                        if not part:
+                            continue
+                        try:
+                            code = int(part)
+                            if code == 0:
+                                self.fg_color = None
+                                self.bg_color = None
+                                self.bold = False
+                            elif code == 1:
+                                self.bold = True
+                            elif code in COLOR_MAP:
+                                self.fg_color = COLOR_MAP[code]
+                            elif code in BG_COLOR_MAP:
+                                self.bg_color = BG_COLOR_MAP[code]
+                        except ValueError:
+                            pass
             else:
+                # Normal text
                 parts = re.split(r'(\r|\n|\r\n)', token)
                 for part in parts:
                     if part == '\n' or part == '\r\n':
                         self.cursor_row += 1
                         if len(self.lines) <= self.cursor_row:
-                            self.lines.append("")
+                            self.lines.append([])
                     elif part == '\r':
                         if self.cursor_row < len(self.lines):
-                            self.lines[self.cursor_row] = ""
+                            self.lines[self.cursor_row] = []
                     else:
                         if self.cursor_row >= len(self.lines):
                             while len(self.lines) <= self.cursor_row:
-                                self.lines.append("")
-                        self.lines[self.cursor_row] += part
+                                self.lines.append([])
+                        
+                        line_segs = self.lines[self.cursor_row]
+                        # Check if last segment has the same style, if so merge text
+                        if line_segs and line_segs[-1]["fg"] == self.fg_color and line_segs[-1]["bg"] == self.bg_color and line_segs[-1]["bold"] == self.bold:
+                            line_segs[-1]["text"] += part
+                        else:
+                            line_segs.append({
+                                "text": part,
+                                "fg": self.fg_color,
+                                "bg": self.bg_color,
+                                "bold": self.bold
+                            })
 
-    def get_text(self):
-        return "\n".join(self.lines)
+    def get_html(self):
+        import html
+        html_lines = []
+        for line in self.lines:
+            line_html = ""
+            for seg in line:
+                text = html.escape(seg["text"])
+                if not text:
+                    continue
+                styles = []
+                if seg["fg"]:
+                    styles.append(f"color: {seg['fg']};")
+                if seg["bg"]:
+                    styles.append(f"background-color: {seg['bg']};")
+                if seg["bold"]:
+                    styles.append("font-weight: bold;")
+                
+                if styles:
+                    style_str = " ".join(styles)
+                    line_html += f'<span style="{style_str}">{text}</span>'
+                else:
+                    line_html += text
+            html_lines.append(line_html)
+            
+        body = "<br/>".join(html_lines)
+        global DEFAULT_FG, DEFAULT_BG
+        return (
+            f'<div style="margin: 0; font-family: monospace; font-size: 13px; '
+            f'color: {DEFAULT_FG}; background-color: {DEFAULT_BG}; line-height: 1.2;">{body}</div>'
+        )
 
 # --- WORKER THREADS FOR GRPC STREAMING ---
 
@@ -1147,7 +1306,7 @@ class CompilerController(QObject):
             if text_edit not in self.emulators:
                 self.emulators[text_edit] = TerminalEmulator()
             self.emulators[text_edit].write(raw_text)
-            text_edit.setPlainText(self.emulators[text_edit].get_text())
+            text_edit.setHtml(self.emulators[text_edit].get_html())
             cursor = text_edit.textCursor()
             cursor.movePosition(cursor.MoveOperation.End)
             text_edit.setTextCursor(cursor)

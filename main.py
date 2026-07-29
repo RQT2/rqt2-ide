@@ -149,12 +149,16 @@ if __name__ == "__main__":
     components_path = os.path.join(os.path.dirname(__file__), "external/rqtll_components")
     load_resources(app, components_path, theme)
 
+    from intern.compiler import update_terminal_colors
+    update_terminal_colors("dark" if theme == "dark.qss" else "light")
+
     def _on_color_scheme_changed(*args, **kwargs):
         global theme
         new_theme = QGuiApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark and "dark.qss" or "light.qss"
         if new_theme != theme:
             load_resources(app, components_path, new_theme)
             theme = new_theme
+            update_terminal_colors("dark" if new_theme == "dark.qss" else "light")
             if 'root' in globals() and isinstance(globals().get('root'), RQTLLRoot):
                 globals().get('root').update_theme(new_theme)
             try:
