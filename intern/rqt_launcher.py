@@ -26,12 +26,14 @@ class ExecutionOutputThread(QThread):
         self.is_running = True
 
     def run(self):
+        import codecs
+        decoder = codecs.getincrementaldecoder('utf-8')(errors='replace')
         try:
             response_stream = self.stub.StartSession(self.request)
             for output in response_stream:
                 if not self.is_running:
                     break
-                text = output.data.decode('utf-8', errors='replace')
+                text = decoder.decode(output.data, final=False)
                 self.output_received.emit(text)
         except Exception as e:
             print(f"Error in execution thread: {e}")

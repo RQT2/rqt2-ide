@@ -108,7 +108,7 @@ update_terminal_colors("dark")
 
 
 class TerminalEmulator:
-    def __init__(self, rows=1000, cols=100):
+    def __init__(self, rows=1000, cols=150):
         self.rows = rows
         self.cols = cols
         self.clear()
@@ -125,7 +125,7 @@ class TerminalEmulator:
 
     def write(self, raw_text):
         import re
-        ansi_re = re.compile(r'\x1b\[([?0-9;]*)([a-zA-Z])|\x1b\((.)|\x1b\)(.)')
+        ansi_re = re.compile(r'\x1b\[([?0-9;]*)([a-zA-Z])|\x1b\((.)|\x1b\)(.)|\x1b\]([^\x07\x1b]*)(?:\x07|\x1b\\)|\x1b(.)')
         
         pos = 0
         while pos < len(raw_text):
@@ -147,6 +147,10 @@ class TerminalEmulator:
                     self.alt_charset = True
                 elif charset == 'B':
                     self.alt_charset = False
+            elif match.group(5): # OSC sequence
+                pass # Ignore window/icon title changes
+            elif match.group(6): # Simple ESC sequence
+                pass # Ignore other simple escape codes
                     
             pos = match.end()
 
@@ -327,7 +331,7 @@ class TerminalEmulator:
         body = "<br/>".join(html_lines)
         global DEFAULT_FG, DEFAULT_BG
         return (
-            f'<div style="margin: 0; font-family: monospace; font-size: 13px; '
+            f'<div style="margin: 0; font-family: monospace; font-size: 13px; white-space: pre; '
             f'color: {DEFAULT_FG}; background-color: {DEFAULT_BG}; line-height: 1.2;">{body}</div>'
         )
 
