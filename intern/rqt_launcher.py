@@ -1,4 +1,5 @@
 import os, subprocess, re
+from .compiler import TerminalEmulator
 from PySide6.QtCore import QObject, QSize, QThread, Signal, Qt, QTimer
 from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QFrame, QVBoxLayout, QLabel, QLineEdit, QPushButton, QCheckBox, QComboBox, QSpacerItem, QSizePolicy, QFileDialog
 from PySide6.QtGui import QIcon, QTextCursor
@@ -100,7 +101,7 @@ class RqtLauncherController(QObject):
         ui_inst.refresh_timer.setSingleShot(True)
         ui_inst.refresh_timer.timeout.connect(lambda u=ui_inst: self.refresh_terminal_view(u))
         ui_inst.pending_update = False
-        ui_inst.terminal_buffer = ""
+        ui_inst.terminal_emulator = TerminalEmulator()
 
     def show_text_edit(self, ui_inst, show):
         if show:
@@ -248,25 +249,18 @@ class RqtLauncherController(QObject):
             self.tab_widget.setTabText(tab_idx, "+")
 
     def append_to_terminal(self, ui_inst, text):
-        clean_text = re.sub(r'\x1b\[[0-9;?]*[a-zA-Z]', '', text)
-        clean_text = re.sub(r'\x1b\(.', '', clean_text)
+        if not hasattr(ui_inst, "terminal_emulator") or ui_inst.terminal_emulator is None:
+            ui_inst.terminal_emulator = TerminalEmulator()
+        ui_inst.terminal_emulator.write(text)
         
-        if not hasattr(ui_inst, "terminal_buffer"):
-            ui_inst.terminal_buffer = ""
-            
-        ui_inst.terminal_buffer += clean_text
-        
-        lines = ui_inst.terminal_buffer.splitlines()
-        if len(lines) > 1000:
-            ui_inst.terminal_buffer = "\n".join(lines[-1000:]) + "\n"
-            
         if not getattr(ui_inst, "pending_update", False):
             ui_inst.pending_update = True
             ui_inst.refresh_timer.start(30)
 
     def refresh_terminal_view(self, ui_inst):
         ui_inst.pending_update = False
-        ui_inst.textEdit.setPlainText(getattr(ui_inst, "terminal_buffer", ""))
+        if hasattr(ui_inst, "terminal_emulator") and ui_inst.terminal_emulator:
+            ui_inst.textEdit.setHtml(ui_inst.terminal_emulator.get_html())
         
         cursor = ui_inst.textEdit.textCursor()
         cursor.movePosition(QTextCursor.End)
