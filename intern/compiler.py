@@ -331,7 +331,7 @@ class TerminalEmulator:
         body = "<br/>".join(html_lines)
         global DEFAULT_FG, DEFAULT_BG
         return (
-            f'<div style="margin: 0; font-family: monospace; font-size: 13px; white-space: pre; '
+            f'<div style="margin: 0; font-family: \'UbuntuMono Nerd Font Mono\', monospace; font-size: 14px; white-space: pre; '
             f'color: {DEFAULT_FG}; background-color: {DEFAULT_BG}; line-height: 1.2;">{body}</div>'
         )
 

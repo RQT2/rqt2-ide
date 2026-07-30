@@ -22,6 +22,10 @@ import introspection_pb2
 import introspection_pb2_grpc
 import execution_pb2
 import execution_pb2_grpc
+import file_system_pb2
+import file_system_pb2_grpc
+import terminal_pb2
+import terminal_pb2_grpc
 
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 from PySide6.QtGui import QFontDatabase, QIcon, QGuiApplication
@@ -76,6 +80,8 @@ class RQTLLRoot:
         self.build_stub = build_pb2_grpc.BuildServiceStub(self.channel)
         self.introspection_stub = introspection_pb2_grpc.IntrospectionServiceStub(self.channel)
         self.node_execution_stub = execution_pb2_grpc.ExecutionServiceStub(self.channel)
+        self.file_stub = file_system_pb2_grpc.FileServiceStub(self.channel)
+        self.terminal_stub = terminal_pb2_grpc.TerminalServiceStub(self.channel)
         
         self.show_startup_notification()
         if not self.check_ros2_installed():

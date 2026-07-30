@@ -52,9 +52,9 @@ class IDEController(QObject):
         }
 
     def start(self):
-        self.switch_view("Editor")
+        self.switch_view("Editor", add_daemon=True, add_tab=True)
 
-    def switch_view(self, target):
+    def switch_view(self, target, add_daemon, add_tab):
         if target == self.current_target:
             return
         
@@ -74,7 +74,7 @@ class IDEController(QObject):
         title = f"RQTLL IDE | {target} / {os.path.basename(self.ws_path)}"
         new_window = DemoWindow(ui_class, title=title, 
                                 icon_dirs=self.root.icon_dirs, 
-                                show_daemon=True, show_tab=False, 
+                                show_daemon=add_daemon, show_tab=add_tab, 
                                 theme=self.root.theme)
         
         self._bind_navigation(new_window)
@@ -97,14 +97,14 @@ class IDEController(QObject):
     def _bind_navigation(self, window):
         ui = window.ui
         try:
-            ui.nav.code.clicked.connect(lambda: self.switch_view("Editor"))
-            ui.nav.launch.clicked.connect(lambda: self.switch_view("Lanzador"))
+            ui.nav.code.clicked.connect(lambda: self.switch_view("Editor", add_daemon=True, add_tab=True))
+            ui.nav.launch.clicked.connect(lambda: self.switch_view("Lanzador", add_daemon=True, add_tab=False))
             #ui.nav.graph.clicked.connect(lambda: self.switch_view("nodes"))
-            ui.nav.teleop.clicked.connect(lambda: self.switch_view("Control"))
-            ui.nav.ssh.clicked.connect(lambda: self.switch_view("SSH"))
-            ui.nav.viz.clicked.connect(lambda: self.switch_view("RViz2"))
-            ui.nav.sim.clicked.connect(lambda: self.switch_view("Gazebo"))
-            ui.nav.widgets.clicked.connect(lambda: self.switch_view("rqt"))
-            ui.nav.packages.clicked.connect(lambda: self.switch_view("Gestor de paquetes"))
+            ui.nav.teleop.clicked.connect(lambda: self.switch_view("Control", add_daemon=True, add_tab=False))
+            ui.nav.ssh.clicked.connect(lambda: self.switch_view("SSH", add_daemon=True, add_tab=False))
+            ui.nav.viz.clicked.connect(lambda: self.switch_view("RViz2", add_daemon=True, add_tab=False))
+            ui.nav.sim.clicked.connect(lambda: self.switch_view("Gazebo", add_daemon=True, add_tab=False))
+            ui.nav.widgets.clicked.connect(lambda: self.switch_view("rqt", add_daemon=True, add_tab=False))
+            ui.nav.packages.clicked.connect(lambda: self.switch_view("Gestor de paquetes", add_daemon=True, add_tab=False))
         except AttributeError as e:
             print(f"Error binding navigation: {e}")
