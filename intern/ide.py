@@ -26,6 +26,7 @@ class IDEController(QObject):
         self.ws_path = ws_path
         self.current_window = None
         self.current_target = None
+        self.terminal_visible = False
         
         # Instantiate sub-controllers
         self.controllers = {
@@ -82,6 +83,15 @@ class IDEController(QObject):
         if hasattr(controller, "bind"):
             controller.bind(new_window)
 
+        if target == "Editor":
+            new_window.ui.TABTERMTabs.setVisible(self.terminal_visible)
+
+        if add_daemon:
+            new_window.titlebar.restartDaemonRequested.connect(self.restart_ros2_daemon)
+
+        if add_tab:
+            new_window.titlebar.splitTerminalRequested.connect(self.toggle_terminal_visibility)
+
         if pos and size:
             new_window.move(pos)
             new_window.resize(size)
@@ -93,6 +103,25 @@ class IDEController(QObject):
 
         self.current_window = new_window
         self.current_target = target
+
+    def restart_ros2_daemon(self):
+        try:
+            import types_pb2
+            req = types_pb2.Empty()
+            res = self.root.system_utils_stub.RestartDaemon(req)
+            if res.ok:
+                self.root.send_notification("RQTLL IDE", "El daemon de ROS 2 se reinició correctamente.", "logo", self.root.current_notify_id)
+            else:
+                self.root.send_notification("RQTLL Error", f"No se pudo reiniciar el daemon de ROS 2: {res.message}", "dialog-error", self.root.current_notify_id)
+        except Exception as e:
+            self.root.send_notification("RQTLL Error", f"Error de comunicación al reiniciar el daemon de ROS 2: {e}", "dialog-error", self.root.current_notify_id)
+
+    def toggle_terminal_visibility(self):
+        if self.current_target == "Editor" and self.current_window:
+            ui = self.current_window.ui
+            is_visible = ui.TABTERMTabs.isVisible()
+            ui.TABTERMTabs.setVisible(not is_visible)
+            self.terminal_visible = not is_visible
 
     def _bind_navigation(self, window):
         ui = window.ui

@@ -72,6 +72,23 @@ class TerminalOutputThread(QThread):
     def stop(self):
         self.is_running = False
 
+class TerminalStarterThread(QThread):
+    started = Signal(str)
+    error = Signal(str)
+
+    def __init__(self, stub, cwd):
+        super().__init__()
+        self.stub = stub
+        self.cwd = cwd
+
+    def run(self):
+        try:
+            req = terminal_pb2.StartTerminalRequest(cwd=self.cwd)
+            res = self.stub.Start(req)
+            self.started.emit(res.session_id)
+        except Exception as e:
+            self.error.emit(str(e))
+
 class ROSIntrospectionThread(QThread):
     counts_updated = Signal(int, int)
 
@@ -94,7 +111,10 @@ class ROSIntrospectionThread(QThread):
             except Exception as e:
                 print(f"Error in ROSIntrospectionThread: {e}")
                 
-            self.msleep(3000)
+            for _ in range(30):
+                if not self.is_running:
+                    break
+                self.msleep(100)
 
     def stop(self):
         self.is_running = False
@@ -107,6 +127,7 @@ class CodeEditorController(QObject):
         self.output_thread = None
         self.introspection_thread = None
         self.session_id = None
+        self.starter_thread = None
         self.active_threads = []
         self.shortcuts = []
 
@@ -516,20 +537,23 @@ class CodeEditorController(QObject):
         self.pending_update = False
 
     def start_terminal_session(self):
-        try:
-            req = terminal_pb2.StartTerminalRequest(
-                cwd=self.ide.ws_path
-            )
-            res = self.ide.root.terminal_stub.Start(req)
-            self.session_id = res.session_id
-            
-            # Start stdout listener thread
-            self.output_thread = TerminalOutputThread(self.ide.root.terminal_stub, self.session_id)
-            self.output_thread.output_received.connect(self.append_to_terminal)
-            self.output_thread.start()
-            
-        except Exception as e:
-            self.ui.EDITORTERMEditor.setHtml(f"<span style='color: red;'>Error al iniciar terminal: {e}</span>")
+        self.ui.EDITORTERMEditor.setHtml("<span style='color: gray;'>Iniciando terminal...</span>")
+        self.starter_thread = TerminalStarterThread(self.ide.root.terminal_stub, self.ide.ws_path)
+        self.starter_thread.started.connect(self.on_terminal_started)
+        self.starter_thread.error.connect(self.on_terminal_start_error)
+        self.starter_thread.start()
+
+    def on_terminal_started(self, session_id):
+        self.session_id = session_id
+        self.ui.EDITORTERMEditor.clear()
+        
+        # Start stdout listener thread
+        self.output_thread = TerminalOutputThread(self.ide.root.terminal_stub, self.session_id)
+        self.output_thread.output_received.connect(self.append_to_terminal)
+        self.output_thread.start()
+
+    def on_terminal_start_error(self, err_msg):
+        self.ui.EDITORTERMEditor.setHtml(f"<span style='color: red;'>Error al iniciar terminal: {err_msg}</span>")
 
     def append_to_terminal(self, text):
         self.terminal.write(text)
@@ -584,11 +608,13 @@ class CodeEditorController(QObject):
                 print(f"Error sending terminal input: {e}")
 
     def cleanup(self):
-        if self.output_thread:
+        if hasattr(self, "output_thread") and self.output_thread:
             self.output_thread.stop()
-        if self.introspection_thread:
+        if hasattr(self, "introspection_thread") and self.introspection_thread:
             self.introspection_thread.stop()
             self.introspection_thread.wait()
+        if hasattr(self, "starter_thread") and self.starter_thread:
+            self.starter_thread.wait()
         if self.session_id:
             try:
                 req = terminal_pb2.SessionRequest(session_id=self.session_id)

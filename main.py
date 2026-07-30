@@ -26,6 +26,8 @@ import file_system_pb2
 import file_system_pb2_grpc
 import terminal_pb2
 import terminal_pb2_grpc
+import system_utils_pb2
+import system_utils_pb2_grpc
 
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 from PySide6.QtGui import QFontDatabase, QIcon, QGuiApplication
@@ -82,6 +84,7 @@ class RQTLLRoot:
         self.node_execution_stub = execution_pb2_grpc.ExecutionServiceStub(self.channel)
         self.file_stub = file_system_pb2_grpc.FileServiceStub(self.channel)
         self.terminal_stub = terminal_pb2_grpc.TerminalServiceStub(self.channel)
+        self.system_utils_stub = system_utils_pb2_grpc.SystemUtilsStub(self.channel)
         
         self.show_startup_notification()
         if not self.check_ros2_installed():
@@ -112,9 +115,26 @@ class RQTLLRoot:
     def update_theme(self, theme: str):
         self.theme = theme
 
-    def show_startup_notification(self):
-        logo_path = os.path.join(base_path, "external/rqtll_components/assets/branding/logo.svg")
+    def send_notification(self, title, msg, icon="logo", replace_id=None):
+        icon_str = icon
+        if icon == "logo":
+            logo_path = os.path.join(base_path, "external/rqtll_components/assets/branding/logo.svg")
+            if os.path.exists(logo_path):
+                icon_str = logo_path
+            else:
+                icon_str = "dialog-information"
         
+        cmd = ['notify-send', '--app-name', 'RQTLL IDE', '--icon', icon_str, title, msg]
+        if replace_id:
+            cmd.extend(['--replace-id', replace_id.strip()])
+        cmd.append('--print-id')
+        try:
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
+            self.current_notify_id, _ = process.communicate()
+        except Exception as e:
+            print(f"Failed to run notify-send: {e}")
+
+    def show_startup_notification(self):
         try:
             request = packages_pb2.ListPackagesRequest(filter="ros-base")
             response_iter = self.package_stub.ListAvailablePackages(request)
@@ -122,32 +142,16 @@ class RQTLLRoot:
                 first_pkg = next(response_iter)
                 distro = first_pkg.version if first_pkg.version else "Jazzy"
                 if distro in ["Ninguna", "No detectada"]:
-                    title = "RQTLL IDE"
-                    msg = "Motor funcionando pero ROS 2 no está instalado."
-                    icon = logo_path
+                    self.send_notification("RQTLL IDE", "Motor funcionando pero ROS 2 no está instalado.", "logo")
                 else:
-                    title = "RQTLL IDE"
-                    msg = f"Motor funcionando. ROS 2 {distro.capitalize()} listo."
-                    icon = logo_path
+                    self.send_notification("RQTLL IDE", f"Motor funcionando. ROS 2 {distro.capitalize()} listo.", "logo")
             except StopIteration:
-                title = "RQTLL IDE"
-                msg = "Motor funcionando pero ROS 2 no está instalado."
-                icon = logo_path
+                self.send_notification("RQTLL IDE", "Motor funcionando pero ROS 2 no está instalado.", "logo")
         except grpc.RpcError as e:
-            title = "RQTLL Error"
-            if e.code() == grpc.StatusCode.UNAVAILABLE:
-                msg = "Motor no disponible. Verifica que rqtll.service esté funcionando. (systemctl status rqtll.service)"
-            else:
-                msg = f"Error de conexión con el backend: {e.details()}"
-            icon = "dialog-error"
+            msg = "Motor no disponible. Verifica que rqtll.service esté funcionando. (systemctl status rqtll.service)" if e.code() == grpc.StatusCode.UNAVAILABLE else f"Error de conexión con el backend: {e.details()}"
+            self.send_notification("RQTLL Error", msg, "dialog-error")
         except Exception as e:
-            title = "RQTLL Error"
-            msg = f"Error inesperado: {str(e)}"
-            icon = "dialog-error"
-
-        cmd = ['notify-send', '--app-name', 'RQTLL IDE', '--print-id', '--icon', icon, title, msg]
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
-        self.current_notify_id, _ = process.communicate()
+            self.send_notification("RQTLL Error", f"Error inesperado: {str(e)}", "dialog-error")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
