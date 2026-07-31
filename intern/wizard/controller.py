@@ -1,6 +1,6 @@
 import os
 from PySide6.QtCore import Qt, QObject, QTimer, QModelIndex
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QMessageBox, QWidget
 from external.rqtll_widgets.utils.base_window import DemoWindow
 
 import grpc
@@ -42,20 +42,61 @@ class WizardController(QObject):
             
         ui_class, title = self.steps[idx]
         
-        # Save previous window position if exists
-        pos = None
-        if self.current_window:
+        if not self.current_window:
+            self.current_window = DemoWindow(ui_class, title=title,
+                                             icon_dirs=self.root.icon_dirs,
+                                             theme=self.root.theme)
+        else:
             if self.current_step_idx == 2:
                 self._cleanup_step2()
-            pos = self.current_window.pos()
-            self.current_window.close()
+                
+            container_layout = self.current_window.main_container.layout()
+            new_content = QWidget(self.current_window.main_container)
+            new_content.setObjectName("Content")
             
-        self.current_window = DemoWindow(ui_class, title=title,
-                                         icon_dirs=self.root.icon_dirs,
-                                         theme=self.root.theme)
-        
-        if pos:
-            self.current_window.move(pos)
+            new_ui = ui_class()
+            try:
+                new_ui.setupUi(new_content, icon_dirs=self.root.icon_dirs, theme=self.root.theme)
+            except TypeError:
+                new_ui.setupUi(new_content)
+                
+            if container_layout is not None:
+                container_layout.replaceWidget(self.current_window.content, new_content)
+            else:
+                self.current_window.main_container.layout().addWidget(new_content)
+                
+            old_content = self.current_window.content
+            self.current_window.content = new_content
+            self.current_window.ui = new_ui
+            
+            old_content.hide()
+            old_content.deleteLater()
+            
+            self.current_window.titlebar.setTitle(title)
+            
+            self.current_window.setMinimumSize(0, 0)
+            self.current_window.setMaximumSize(16777215, 16777215)
+            try:
+                self.current_window.titlebar._btn_max.setVisible(True)
+            except Exception:
+                pass
+                
+            content_min = new_content.minimumSize()
+            content_max = new_content.maximumSize()
+            if content_min.isValid() and content_max.isValid() and content_min == content_max and content_min.width() > 0:
+                title_height = 40
+                fixed_width = content_min.width() + 16
+                fixed_height = content_min.height() + 16 + title_height
+                self.current_window.setFixedSize(fixed_width, fixed_height)
+                try:
+                    self.current_window.titlebar._btn_max.setVisible(False)
+                except Exception:
+                    pass
+            else:
+                hint = new_content.sizeHint()
+                if hint.isValid():
+                    title_height = 40
+                    self.current_window.resize(hint.width() + 16, hint.height() + 16 + title_height)
             
         self._connect_buttons(idx)
         if idx == 0:

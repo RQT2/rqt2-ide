@@ -658,7 +658,7 @@ class CompilerController(QObject):
         ws_root = self.find_workspace_root()
         try:
             req = workspace_pb2.OpenWorkspaceRequest(path=ws_root)
-            self.ide.root.workspace_stub.OpenWorkspace.future(req)
+            self.ide.root.workspace_stub.OpenWorkspace(req)
         except Exception:
             pass
 
@@ -818,7 +818,7 @@ class CompilerController(QObject):
 
     def on_btn_pub_topic_1_clicked(self):
         topic_name = self.ui.LABELTopic_1.text().strip() or "Tópico"
-        msg_type = self.ui.EDITMSGType.text().strip() or "std_msgs/msg/String"
+        msg_type = self.ui.EDITMSGType_1.text().strip() or "std_msgs/msg/String"
         msg_content = self.ui.EDITMSGContent_1.toPlainText().strip()
         self.spawn_publisher_for_topic(topic_name, self.ui.LAYOUTTopic1, self.ui.BTNPUBConfig_1, msg_type, msg_content)
         self.ui.EDITMSGContent_1.clear()
@@ -850,28 +850,52 @@ class CompilerController(QObject):
         
         self.publisher_buttons[tab_widget] = (new_pub_btn, layout_topic, topic_name)
 
-        # Publish once via gRPC
+        # Publish periodically via gRPC
         actual_type = msg_type or "std_msgs/msg/String"
         actual_content = msg_content or "{}"
-        try:
-            req = data_stream_pb2.PublishRequest(
-                topic=topic_name,
-                message_type=actual_type,
-                data=actual_content.encode('utf-8')
-            )
-            self.ide.root.data_stream_stub.Publish.future(req)
-            text_edit = tab_widget.findChild(QTextEdit)
-            if text_edit:
-                text_edit.append(f"[{topic_name}] Message published once:\n{actual_content}\n")
-        except Exception as e:
-            text_edit = tab_widget.findChild(QTextEdit)
-            if text_edit:
-                text_edit.append(f"Error publishing: {e}\n")
+        
+        # Clean content and wrap in braces if not already wrapped
+        actual_content_stripped = actual_content.strip()
+        if not (actual_content_stripped.startswith("{") and actual_content_stripped.endswith("}")):
+            actual_content = f"{{{actual_content_stripped}}}"
+
+        # Periodic timer for this publisher
+        pub_timer = QTimer(tab_widget)
+        pub_timer.setInterval(1000) # 1Hz
+        
+        def do_publish():
+            try:
+                req = data_stream_pb2.PublishRequest(
+                    topic=topic_name,
+                    message_type=actual_type,
+                    data=actual_content.encode('utf-8')
+                )
+                self.ide.root.data_stream_stub.Publish(req)
+                text_edit = tab_widget.findChild(QTextEdit)
+                if text_edit:
+                    text_edit.append(f"[{topic_name}] Message published:\n{actual_content}\n")
+            except Exception as e:
+                text_edit = tab_widget.findChild(QTextEdit)
+                if text_edit:
+                    text_edit.append(f"Error publishing: {e}\n")
+                    
+        pub_timer.timeout.connect(do_publish)
+        pub_timer.start()
+        
+        tab_widget.setProperty("pub_timer", pub_timer)
+        
+        # Publish first message immediately
+        do_publish()
 
     def close_specific_publisher(self, tab_widget):
         if tab_widget in self.publisher_buttons:
             new_pub_btn, layout_topic, topic_name = self.publisher_buttons[tab_widget]
             
+            # Stop the periodic timer
+            pub_timer = tab_widget.property("pub_timer")
+            if pub_timer:
+                pub_timer.stop()
+                
             idx = self.ui.tabWidget.indexOf(tab_widget)
             if idx != -1:
                 self.ui.tabWidget.removeTab(idx)
@@ -881,8 +905,6 @@ class CompilerController(QObject):
             new_pub_btn.deleteLater()
             
             del self.publisher_buttons[tab_widget]
-            
-            self.check_and_remove_topic(topic_name)
 
     def toggle_echo_tab(self, topic_name, btn_echo):
         if topic_name in self.echo_tabs:
@@ -966,8 +988,6 @@ class CompilerController(QObject):
                 self.active_echo_workers[topic_name].cancel()
                 self.active_echo_workers[topic_name].wait()
                 del self.active_echo_workers[topic_name]
-            
-            self.check_and_remove_topic(topic_name)
 
     def check_and_remove_topic(self, topic_name):
         if topic_name in self.dynamic_topics:
@@ -989,7 +1009,7 @@ class CompilerController(QObject):
     # --- DYNAMIC TOPICS HANDLING ---
 
     def on_btn_pub_topic_clicked(self):
-        topic_text = self.ui.EDITNEWTopic.text().strip() or "new-topic"
+        topic_text = self.ui.EDITNEWTopic.text().strip() or "new"
         topic_name = topic_text if topic_text.startswith("/") else "/" + topic_text.replace(" ", "-")
         
         if topic_name not in self.dynamic_topics:
@@ -1427,16 +1447,22 @@ class CompilerController(QObject):
         self.list_topics_worker = ListTopicsWorker(self.ide.root.introspection_stub)
         
         def on_topics_received(topics):
+            active_names = set()
             for t in topics:
-                # Ignore parameter and rosout topics for a clean view
                 if t['name'] in ["/parameter_events", "/rosout"]:
                     continue
+                active_names.add(t['name'])
+                
                 if t['name'] not in self.dynamic_topics:
                     self.create_dynamic_topic_layouts(t['name'])
                 
                 info = self.dynamic_topics[t['name']]
                 info['edit_msg_type'].setText(t['type'])
-                # If we have an active echo tab or pub tab, we can update label stats here too
+            
+            current_names = list(self.dynamic_topics.keys())
+            for name in current_names:
+                if name not in active_names:
+                    self.check_and_remove_topic(name)
                 
         self.list_topics_worker.topics_received.connect(on_topics_received)
         self.list_topics_worker.start()

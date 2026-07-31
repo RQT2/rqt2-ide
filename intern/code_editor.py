@@ -135,29 +135,18 @@ class CodeEditorController(QObject):
         self.window = window
         self.ui = window.ui
         
-        # Connect file explorer events
         self.ui.TREEFILEManage.itemExpanded.connect(self.on_item_expanded)
         self.ui.TREEFILEManage.clicked.connect(self.on_item_clicked)
-        
-        # Setup code tabs
         self.ui.TABCODETabs.clear()
         self.ui.TABCODETabs.tabCloseRequested.connect(self.close_code_tab)
 
-        # Setup keyboard shortcuts
         self.setup_shortcuts()
-        
-        # Load file explorer
         self.load_file_tree()
-        
-        # Setup local terminal emulator
         self.setup_terminal()
         self.start_terminal_session()
-
-        # Update project path label and count ROS nodes/topics
         self.update_path_label()
         self.start_introspection()
         
-        # Clean up PTY process on window close/destruction
         self.window.destroyed.connect(self.cleanup)
 
     def load_file_tree(self):
@@ -405,19 +394,24 @@ class CodeEditorController(QObject):
             return
             
         if widget.is_modified:
-            reply = QMessageBox.question(
-                self.window, 
-                "Guardar cambios",
-                f"El archivo '{self.ui.TABCODETabs.tabText(idx).rstrip('*')}' tiene cambios sin guardar. ¿Deseas guardarlos?",
-                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
-                QMessageBox.StandardButton.Save
-            )
+            msg_box = QMessageBox(self.window)
+            msg_box.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.setWindowTitle("RQTLL | Confirmación")
+            msg_box.setText("¿Guardar cambios?")
+            msg_box.setInformativeText(f"El archivo '{self.ui.TABCODETabs.tabText(idx).rstrip('*')}' tiene cambios sin guardar. ¿Deseas guardarlos?")
+            no_save = msg_box.addButton("Cerrar sin guardar", QMessageBox.ButtonRole.ActionRole)
+            save = msg_box.addButton("Guardar", QMessageBox.ButtonRole.AcceptRole)
+            cancel = msg_box.addButton("Cancelar", QMessageBox.ButtonRole.RejectRole)
             
-            if reply == QMessageBox.StandardButton.Save:
+            msg_box.exec()
+            if msg_box.clickedButton() == save:
                 if self.save_tab_file(widget):
                     self.ui.TABCODETabs.removeTab(idx)
-            elif reply == QMessageBox.StandardButton.Discard:
+            elif msg_box.clickedButton() == no_save:
                 self.ui.TABCODETabs.removeTab(idx)
+            else:
+                return
         else:
             self.ui.TABCODETabs.removeTab(idx)
 
@@ -607,7 +601,23 @@ class CodeEditorController(QObject):
             except Exception as e:
                 print(f"Error sending terminal input: {e}")
 
+    def on_show(self):
+        if hasattr(self, "shortcuts") and self.shortcuts:
+            for s in self.shortcuts:
+                s.setEnabled(True)
+
+    def on_hide(self):
+        if hasattr(self, "shortcuts") and self.shortcuts:
+            for s in self.shortcuts:
+                s.setEnabled(False)
+
     def cleanup(self):
+        if hasattr(self, "shortcuts") and self.shortcuts:
+            for s in self.shortcuts:
+                s.setEnabled(False)
+                s.deleteLater()
+            self.shortcuts.clear()
+
         if hasattr(self, "output_thread") and self.output_thread:
             self.output_thread.stop()
         if hasattr(self, "introspection_thread") and self.introspection_thread:

@@ -27,6 +27,15 @@ class IDEController(QObject):
         self.current_window = None
         self.current_target = None
         self.terminal_visible = False
+        self.view_widgets = {}
+
+        if self.ws_path:
+            try:
+                import workspace_pb2
+                req = workspace_pb2.OpenWorkspaceRequest(path=self.ws_path)
+                self.root.workspace_stub.OpenWorkspace(req)
+            except Exception as e:
+                print(f"Failed to open workspace on backend: {e}")
         
         # Instantiate sub-controllers
         self.controllers = {
@@ -66,43 +75,104 @@ class IDEController(QObject):
         ui_class = self.target_forms[target]
         controller = self.controllers[target]
 
-        pos = None
-        size = None
-        if self.current_window:
-            pos = self.current_window.pos()
-            size = self.current_window.size()
+        if self.current_target and self.current_target in self.controllers:
+            prev_ctrl = self.controllers[self.current_target]
+            if hasattr(prev_ctrl, "on_hide"):
+                try:
+                    prev_ctrl.on_hide()
+                except Exception as e:
+                    print(f"Error hiding previous controller: {e}")
 
         title = f"RQTLL IDE | {target} / {os.path.basename(self.ws_path)}"
-        new_window = DemoWindow(ui_class, title=title, 
-                                icon_dirs=self.root.icon_dirs, 
-                                show_daemon=add_daemon, show_tab=add_tab, 
-                                theme=self.root.theme)
-        
-        self._bind_navigation(new_window)
+        if not self.current_window:
+            self.current_window = DemoWindow(
+                ui_class,
+                title=title,
+                icon_dirs=self.root.icon_dirs,
+                show_daemon=add_daemon,
+                show_tab=add_tab,
+                theme=self.root.theme
+            )
+            self.view_widgets[target] = (self.current_window.content, self.current_window.ui)
+            
+            self.current_window.destroyed.connect(self.cleanup_all_controllers)
+            
+            self.current_window.titlebar.restartDaemonRequested.connect(self.restart_ros2_daemon)
+            self.current_window.titlebar.splitTerminalRequested.connect(self.toggle_terminal_visibility)
+            
+            if hasattr(controller, "bind"):
+                controller.bind(self.current_window)
+            
+            self.current_window.show()
+        else:
+            if target not in self.view_widgets:
+                from PySide6.QtWidgets import QWidget
+                new_content = QWidget(self.current_window.main_container)
+                new_content.setObjectName("Content")
+                new_ui = ui_class()
+                try:
+                    new_ui.setupUi(new_content, icon_dirs=self.root.icon_dirs, theme=self.root.theme)
+                except TypeError:
+                    new_ui.setupUi(new_content)
+                self.view_widgets[target] = (new_content, new_ui)
+                
+                old_content = self.current_window.content
+                self.current_window.content = new_content
+                self.current_window.ui = new_ui
+                
+                if hasattr(controller, "bind"):
+                    controller.bind(self.current_window)
+                
+                self.current_window.content = old_content
+                self.current_window.ui = self.view_widgets[self.current_target][1]
+            
+            new_content, new_ui = self.view_widgets[target]
+            
+            self.current_window.main_container.layout().replaceWidget(self.current_window.content, new_content)
+            self.current_window.content.hide()
+            new_content.show()
+            
+            self.current_window.content = new_content
+            self.current_window.ui = new_ui
+            
+            self.current_window.titlebar.setTitle(title)
+            self.current_window.titlebar.showDaemonButton(add_daemon)
+            self.current_window.titlebar.showTabButton(add_tab)
 
-        if hasattr(controller, "bind"):
-            controller.bind(new_window)
+        if hasattr(controller, "on_show"):
+            try:
+                controller.on_show()
+            except Exception as e:
+                print(f"Error showing controller: {e}")
 
         if target == "Editor":
-            new_window.ui.TABTERMTabs.setVisible(self.terminal_visible)
+            self.current_window.ui.TABTERMTabs.setVisible(self.terminal_visible)
 
-        if add_daemon:
-            new_window.titlebar.restartDaemonRequested.connect(self.restart_ros2_daemon)
+        self._bind_navigation(self.current_window)
 
-        if add_tab:
-            new_window.titlebar.splitTerminalRequested.connect(self.toggle_terminal_visibility)
+        if hasattr(self.current_window.ui, "horizontalLayout"):
+            self.current_window.ui.horizontalLayout.setContentsMargins(0, 0, 0, 0)
+            self.current_window.ui.horizontalLayout.setSpacing(6)
 
-        if pos and size:
-            new_window.move(pos)
-            new_window.resize(size)
-        
-        new_window.show()
+        if hasattr(self.current_window.ui, "verticalLayout_3"):
+            self.current_window.ui.verticalLayout_3.setContentsMargins(0, 0, 8, 8)
+            self.current_window.ui.verticalLayout_3.setSpacing(0)
 
-        if self.current_window:
-            self.current_window.close()
+        if hasattr(self.current_window.ui, "nav") and hasattr(self.current_window.ui.nav, "layout"):
+            self.current_window.ui.nav.layout.setContentsMargins(8, 4, 0, 8)
 
-        self.current_window = new_window
+        self.current_window.style().unpolish(self.current_window)
+        self.current_window.style().polish(self.current_window)
+
         self.current_target = target
+
+    def cleanup_all_controllers(self):
+        for ctrl_name, ctrl in self.controllers.items():
+            if hasattr(ctrl, "cleanup"):
+                try:
+                    ctrl.cleanup()
+                except Exception as e:
+                    print(f"Error cleaning up controller {ctrl_name}: {e}")
 
     def restart_ros2_daemon(self):
         try:

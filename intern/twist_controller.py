@@ -354,4 +354,4 @@ class TwistController(QObject):
             )
             self.ide.root.data_stream_stub.Publish(req)
         except Exception as e:
-            pass
+            print(f"[gRPC Client] Exception in send_twist_message: {e}")
