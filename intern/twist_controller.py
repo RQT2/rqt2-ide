@@ -16,19 +16,24 @@ class ImageSubscriberWorker(QThread):
         self.stream = None
 
     def run(self):
-        try:
-            req = data_stream_pb2.SubscribeRequest(
-                topic="image",
-                message_type="sensor_msgs/msg/Image"
-            )
-            self.stream = self.stub.Subscribe(req)
-            for response in self.stream:
-                if not self.running:
-                    break
-                if response.data:
-                    self.image_received.emit(response.data)
-        except Exception as e:
-            self.error_occurred.emit(str(e))
+        import time
+        while self.running:
+            try:
+                req = data_stream_pb2.SubscribeRequest(
+                    topic="image",
+                    message_type="sensor_msgs/msg/Image"
+                )
+                self.stream = self.stub.Subscribe(req)
+                for response in self.stream:
+                    if not self.running:
+                        break
+                    if response.data:
+                        self.image_received.emit(response.data)
+            except Exception as e:
+                self.error_occurred.emit(str(e))
+            
+            if self.running:
+                time.sleep(2.0)
 
     def stop(self):
         self.running = False
