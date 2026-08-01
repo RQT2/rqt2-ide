@@ -305,6 +305,26 @@ class CodeEditorController(QObject):
         s_close.activated.connect(self.close_current_tab)
         self.shortcuts.append(s_close)
 
+        # Ctrl+F (Find Toggle)
+        s_find = QShortcut(QKeySequence("Ctrl+F"), self.window)
+        s_find.activated.connect(self.toggle_find)
+        self.shortcuts.append(s_find)
+
+        # Ctrl+H (Replace Toggle)
+        s_replace = QShortcut(QKeySequence("Ctrl+H"), self.window)
+        s_replace.activated.connect(self.toggle_replace)
+        self.shortcuts.append(s_replace)
+
+        # Ctrl+, (Command Palette Toggle)
+        s_palette = QShortcut(QKeySequence("Ctrl+,"), self.window)
+        s_palette.activated.connect(self.toggle_command_palette)
+        self.shortcuts.append(s_palette)
+
+        # Ctrl+/ (Comment Line Toggle)
+        s_comment = QShortcut(QKeySequence("Ctrl+/"), self.window)
+        s_comment.activated.connect(self.comment_line)
+        self.shortcuts.append(s_comment)
+
     def on_item_clicked(self, index):
         item = self.ui.TREEFILEManage.itemFromIndex(index)
         if not item:
@@ -349,18 +369,44 @@ class CodeEditorController(QObject):
             print(f"Error opening file {path}: {e}")
 
     def create_tab(self, path, content=""):
+        from .editor_widget import CodeEditorWidget
+        from .syntax_highlighter import RosCodeHighlighter
+        from .editor_dialogs import FindPanel, ReplacePanel, CommandPalettePanel
+
         tab_widget = QWidget()
         layout = QVBoxLayout(tab_widget)
         layout.setContentsMargins(0, 0, 0, 0)
         
-        text_edit = QTextEdit(tab_widget)
+        text_edit = CodeEditorWidget(tab_widget, theme=self.ide.root.theme)
         text_edit.setObjectName("EDITCODEditor")
         text_edit.setTabStopDistance(32.0)
-        
-        font = QFont("UbuntuMono Nerd Font Mono")
-        font.setPointSize(11)
-        text_edit.setFont(font)
         text_edit.setPlainText(content)
+        
+        # Add syntax highlighter
+        available_libs = getattr(self.ide.root, "available_libs", None)
+        text_edit.highlighter = RosCodeHighlighter(
+            text_edit.document(),
+            os.path.basename(path) if path else "",
+            theme=self.ide.root.theme,
+            available_libs=available_libs
+        )
+        
+        # Add dialog overlays
+        tab_widget.find_panel = FindPanel(tab_widget, text_edit, theme_name=self.ide.root.theme, icon_dirs=self.ide.root.icon_dirs)
+        tab_widget.replace_panel = ReplacePanel(tab_widget, text_edit, theme_name=self.ide.root.theme, icon_dirs=self.ide.root.icon_dirs)
+        tab_widget.command_palette = CommandPalettePanel(tab_widget, theme_name=self.ide.root.theme)
+
+        # Reposition overlays on resize
+        def on_tab_resize(event):
+            if hasattr(tab_widget, "find_panel"):
+                tab_widget.find_panel.adjust_position()
+            if hasattr(tab_widget, "replace_panel"):
+                tab_widget.replace_panel.adjust_position()
+            if hasattr(tab_widget, "command_palette"):
+                tab_widget.command_palette.adjust_size()
+            QWidget.resizeEvent(tab_widget, event)
+            
+        tab_widget.resizeEvent = on_tab_resize
         
         layout.addWidget(text_edit)
         
@@ -368,13 +414,16 @@ class CodeEditorController(QObject):
         tab_widget.file_path = path
         tab_widget.is_modified = False
         
-        text_edit.textChanged.connect(lambda: self.on_text_changed(tab_widget))
+        # Connect textChanged asynchronously to prevent trigger during setup
+        QTimer.singleShot(150, lambda: text_edit.textChanged.connect(lambda: self.on_text_changed(tab_widget)))
         
         file_name = os.path.basename(path) if path else "Sin título"
         idx = self.ui.TABCODETabs.addTab(tab_widget, file_name)
         self.ui.TABCODETabs.setCurrentIndex(idx)
 
     def on_text_changed(self, tab_widget):
+        if getattr(tab_widget, "is_loading", False):
+            return
         if not tab_widget.is_modified:
             tab_widget.is_modified = True
             idx = self.ui.TABCODETabs.indexOf(tab_widget)
@@ -631,3 +680,126 @@ class CodeEditorController(QObject):
                 self.ide.root.terminal_stub.Close(req)
             except Exception as e:
                 print(f"Error closing terminal session: {e}")
+
+    # --- ADVANCED EDITOR SHORTCUT ACTIONS ---
+
+    def toggle_find(self):
+        idx = self.ui.TABCODETabs.currentIndex()
+        if idx == -1:
+            return
+        widget = self.ui.TABCODETabs.widget(idx)
+        if not hasattr(widget, "find_panel"):
+            return
+
+        if widget.find_panel.isVisible():
+            widget.find_panel.hide()
+        else:
+            if hasattr(widget, "replace_panel"):
+                widget.replace_panel.hide()
+            if hasattr(widget, "command_palette"):
+                widget.command_palette.hide()
+            widget.find_panel.show()
+
+    def toggle_replace(self):
+        idx = self.ui.TABCODETabs.currentIndex()
+        if idx == -1:
+            return
+        widget = self.ui.TABCODETabs.widget(idx)
+        if not hasattr(widget, "replace_panel"):
+            return
+
+        if widget.replace_panel.isVisible():
+            widget.replace_panel.hide()
+        else:
+            if hasattr(widget, "find_panel"):
+                widget.find_panel.hide()
+            if hasattr(widget, "command_palette"):
+                widget.command_palette.hide()
+            widget.replace_panel.show()
+
+    def toggle_command_palette(self):
+        idx = self.ui.TABCODETabs.currentIndex()
+        if idx == -1:
+            return
+        widget = self.ui.TABCODETabs.widget(idx)
+        if not hasattr(widget, "command_palette"):
+            return
+
+        if widget.command_palette.isVisible():
+            widget.command_palette.hide()
+        else:
+            if hasattr(widget, "find_panel"):
+                widget.find_panel.hide()
+            if hasattr(widget, "replace_panel"):
+                widget.replace_panel.hide()
+            widget.command_palette.show()
+
+    def comment_line(self):
+        idx = self.ui.TABCODETabs.currentIndex()
+        if idx == -1:
+            return
+        widget = self.ui.TABCODETabs.widget(idx)
+        if not hasattr(widget, "text_edit"):
+            return
+        editor = widget.text_edit
+        
+        cursor = editor.textCursor()
+        start = cursor.selectionStart()
+        end = cursor.selectionEnd()
+        
+        cursor.setPosition(start)
+        start_block = cursor.blockNumber()
+        cursor.setPosition(end)
+        end_block = cursor.blockNumber()
+        
+        if end_block > start_block and cursor.atBlockStart():
+            end_block -= 1
+            
+        doc = editor.document()
+        ext = os.path.basename(widget.file_path).split('.')[-1].lower() if widget.file_path else ""
+        
+        comment_str = "# "
+        comment_end = ""
+        is_xml = ext in ('xml', 'xacro', 'sdf', 'dae', 'urdf', 'launch', 'html')
+        if ext in ('cpp', 'hpp', 'h', 'c', 'ino', 'rs', 'proto', 'json'):
+            comment_str = "// "
+        elif is_xml:
+            comment_str = "<!-- "
+            comment_end = " -->"
+            
+        cursor.beginEditBlock()
+        for b_num in range(start_block, end_block + 1):
+            block = doc.findBlockByNumber(b_num)
+            text = block.text()
+            
+            # Find indentation prefix
+            indent = ""
+            for char in text:
+                if char.isspace():
+                    indent += char
+                else:
+                    break
+            stripped = text[len(indent):]
+            
+            if is_xml:
+                if stripped.startswith("<!-- ") and stripped.endswith(" -->"):
+                    new_text = indent + stripped[5:-4]
+                elif stripped.startswith("<!--") and stripped.endswith("-->"):
+                    new_text = indent + stripped[4:-3]
+                else:
+                    new_text = indent + "<!-- " + stripped + " -->"
+            else:
+                c_strip = comment_str.strip()
+                if stripped.startswith(comment_str):
+                    new_text = indent + stripped[len(comment_str):]
+                elif stripped.startswith(c_strip):
+                    new_text = indent + stripped[len(c_strip):]
+                else:
+                    new_text = indent + comment_str + stripped
+                    
+            c = QTextCursor(block)
+            c.movePosition(QTextCursor.MoveOperation.StartOfBlock)
+            c.movePosition(QTextCursor.MoveOperation.EndOfBlock, QTextCursor.MoveMode.KeepAnchor)
+            c.insertText(new_text)
+            
+        cursor.endEditBlock()

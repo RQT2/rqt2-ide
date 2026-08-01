@@ -142,7 +142,11 @@ class RQTLLRoot:
         self.icon_dirs = icon_dirs
         self.current_notify_id = None
         
-        self.channel = grpc.insecure_channel('127.0.0.1:50051')
+        options = [
+            ('grpc.max_receive_message_length', 1024 ** 3),
+            ('grpc.max_send_message_length', 1024 ** 3)
+        ]
+        self.channel = grpc.insecure_channel('127.0.0.1:50051', options=options)
         self.package_stub = packages_pb2_grpc.PackageServiceStub(self.channel)
         self.installer_stub = installer_pb2_grpc.ROSInstallerServiceStub(self.channel)
         self.workspace_stub = workspace_pb2_grpc.WorkspaceServiceStub(self.channel)
@@ -155,12 +159,27 @@ class RQTLLRoot:
         self.terminal_stub = terminal_pb2_grpc.TerminalServiceStub(self.channel)
         self.system_utils_stub = system_utils_pb2_grpc.SystemUtilsStub(self.channel)
         
+        self.load_available_libraries()
+        
         self.show_startup_notification()
         if not self.check_ros2_installed():
             self.wizard = WizardController(self)
             self.wizard.start()
         else:
             self.open_home()
+
+    def load_available_libraries(self):
+        self.available_libs = {"py": [], "cpp": [], "arduino": []}
+        try:
+            import types_pb2
+            request = types_pb2.Empty()
+            response = self.system_utils_stub.GetAvailableLibraries(request)
+            self.available_libs["py"] = list(response.python_libraries)
+            self.available_libs["cpp"] = list(response.cpp_libraries)
+            self.available_libs["arduino"] = list(response.arduino_libraries)
+            print(f"Loaded {len(response.python_libraries)} Python, {len(response.cpp_libraries)} C++, and {len(response.arduino_libraries)} Arduino libraries.")
+        except Exception as e:
+            print(f"Failed to load available libraries from backend: {e}")
 
     def check_ros2_installed(self) -> bool:
         try:
