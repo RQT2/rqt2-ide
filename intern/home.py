@@ -21,10 +21,6 @@ class HomeController(QObject):
                              icon_dirs=self.root.icon_dirs, 
                              theme=self.root.theme)
         self._setup_connections()
-        try:
-            self.f0.uiReinitialized.connect(self._setup_connections)
-        except Exception:
-            pass
         self.f0.show()
 
     def _setup_connections(self):

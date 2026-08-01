@@ -29,9 +29,78 @@ import terminal_pb2_grpc
 import system_utils_pb2
 import system_utils_pb2_grpc
 
-from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
-from PySide6.QtGui import QFontDatabase, QIcon, QGuiApplication
+from PySide6.QtWidgets import (QApplication, QSystemTrayIcon, QMenu,
+                               QPushButton, QToolButton, QTreeWidgetItem,
+                               QListWidgetItem, QTableWidgetItem, QLabel)
+from PySide6.QtGui import QFontDatabase, QIcon, QGuiApplication, QAction, QPixmap
 from PySide6.QtCore import Qt
+
+# Monkeypatching for dynamic icon reloading on theme change
+original_add_file = QIcon.addFile
+def custom_add_file(self, path, *args, **kwargs):
+    self._rqtll_path = path
+    return original_add_file(self, path, *args, **kwargs)
+QIcon.addFile = custom_add_file
+
+original_icon_pixmap = QIcon.pixmap
+def custom_icon_pixmap(self, *args, **kwargs):
+    pix = original_icon_pixmap(self, *args, **kwargs)
+    if hasattr(self, "_rqtll_path"):
+        pix._rqtll_path = self._rqtll_path
+    return pix
+QIcon.pixmap = custom_icon_pixmap
+
+original_set_pixmap = QLabel.setPixmap
+def custom_set_pixmap(self, pixmap):
+    if hasattr(pixmap, "_rqtll_path"):
+        self._rqtll_pixmap_path = pixmap._rqtll_path
+        self._rqtll_pixmap_size = pixmap.size()
+    return original_set_pixmap(self, pixmap)
+QLabel.setPixmap = custom_set_pixmap
+
+original_set_icon_btn = QPushButton.setIcon
+def custom_set_icon_btn(self, icon):
+    if hasattr(icon, "_rqtll_path"):
+        self._rqtll_icon_path = icon._rqtll_path
+    return original_set_icon_btn(self, icon)
+QPushButton.setIcon = custom_set_icon_btn
+
+original_set_icon_tool = QToolButton.setIcon
+def custom_set_icon_tool(self, icon):
+    if hasattr(icon, "_rqtll_path"):
+        self._rqtll_icon_path = icon._rqtll_path
+    return original_set_icon_tool(self, icon)
+QToolButton.setIcon = custom_set_icon_tool
+
+original_set_icon_twi = QTreeWidgetItem.setIcon
+def custom_set_icon_twi(self, column, icon):
+    if hasattr(icon, "_rqtll_path"):
+        if not hasattr(self, "_rqtll_icon_paths"):
+            self._rqtll_icon_paths = {}
+        self._rqtll_icon_paths[column] = icon._rqtll_path
+    return original_set_icon_twi(self, column, icon)
+QTreeWidgetItem.setIcon = custom_set_icon_twi
+
+original_set_icon_lwi = QListWidgetItem.setIcon
+def custom_set_icon_lwi(self, icon):
+    if hasattr(icon, "_rqtll_path"):
+        self._rqtll_icon_path = icon._rqtll_path
+    return original_set_icon_lwi(self, icon)
+QListWidgetItem.setIcon = custom_set_icon_lwi
+
+original_set_icon_tbi = QTableWidgetItem.setIcon
+def custom_set_icon_tbi(self, icon):
+    if hasattr(icon, "_rqtll_path"):
+        self._rqtll_icon_path = icon._rqtll_path
+    return original_set_icon_tbi(self, icon)
+QTableWidgetItem.setIcon = custom_set_icon_tbi
+
+original_set_icon_act = QAction.setIcon
+def custom_set_icon_act(self, icon):
+    if hasattr(icon, "_rqtll_path"):
+        self._rqtll_icon_path = icon._rqtll_path
+    return original_set_icon_act(self, icon)
+QAction.setIcon = custom_set_icon_act
 
 from intern.home import HomeController
 from intern.package_manager import PackageManagerController

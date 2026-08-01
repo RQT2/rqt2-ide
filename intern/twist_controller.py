@@ -172,7 +172,7 @@ class TwistController(QObject):
             button.setText(self.get_key_display_name(key_code))
 
     def load_bindings(self):
-        path = os.path.join(self.ide.ws_path, ".rqtll_keybindings.json")
+        path = os.path.expanduser("~/.rqtll_keybindings.json")
         if os.path.exists(path):
             try:
                 with open(path, "r") as f:
@@ -184,7 +184,7 @@ class TwistController(QObject):
                 print(f"Error loading keybindings: {e}")
 
     def save_bindings(self):
-        path = os.path.join(self.ide.ws_path, ".rqtll_keybindings.json")
+        path = os.path.expanduser("~/.rqtll_keybindings.json")
         try:
             with open(path, "w") as f:
                 json.dump(self.key_bindings, f)
