@@ -137,9 +137,25 @@ class TwistController(QObject):
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.image_label)
 
+    def on_show(self):
+        if self.worker is not None:
+            try:
+                self.worker.stop()
+            except Exception:
+                pass
+            self.worker = None
+
         self.worker = ImageSubscriberWorker(self.ide.root.data_stream_stub)
         self.worker.image_received.connect(self.on_image_received)
         self.worker.start()
+
+    def on_hide(self):
+        if self.worker is not None:
+            try:
+                self.worker.stop()
+            except Exception:
+                pass
+            self.worker = None
 
     def on_image_received(self, jpeg_bytes):
         pixmap = QPixmap()

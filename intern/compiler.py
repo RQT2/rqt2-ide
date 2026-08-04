@@ -594,6 +594,11 @@ class CompilerController(QObject):
         self.topics_timer = QTimer(self)
         self.topics_timer.timeout.connect(self.refresh_topics_list)
 
+        self.log_buffers = {}
+        self.log_update_timer = QTimer(self)
+        self.log_update_timer.setInterval(100)
+        self.log_update_timer.timeout.connect(self._flush_log_buffers)
+
     def find_workspace_root(self):
         return getattr(self.ide, 'ws_path', None) or os.path.expanduser("~/Proyectos/rqtll")
 
@@ -1430,17 +1435,28 @@ class CompilerController(QObject):
                 widget.deleteLater()
 
     def append_log_to_edit(self, text_edit, raw_text):
+        if text_edit not in self.log_buffers:
+            self.log_buffers[text_edit] = []
+        self.log_buffers[text_edit].append(raw_text)
+        if not self.log_update_timer.isActive():
+            self.log_update_timer.start()
+
+    def _flush_log_buffers(self):
         try:
-            if not hasattr(self, 'emulators'):
-                self.emulators = {}
-            if text_edit not in self.emulators:
-                self.emulators[text_edit] = TerminalEmulator()
-            self.emulators[text_edit].write(raw_text)
-            text_edit.setHtml(self.emulators[text_edit].get_html())
-            cursor = text_edit.textCursor()
-            cursor.movePosition(cursor.MoveOperation.End)
-            text_edit.setTextCursor(cursor)
-        except RuntimeError:
+            for text_edit, pending in list(self.log_buffers.items()):
+                if not pending:
+                    continue
+                raw_text = "".join(pending)
+                pending.clear()
+                
+                if text_edit not in self.emulators:
+                    self.emulators[text_edit] = TerminalEmulator()
+                self.emulators[text_edit].write(raw_text)
+                text_edit.setHtml(self.emulators[text_edit].get_html())
+                cursor = text_edit.textCursor()
+                cursor.movePosition(cursor.MoveOperation.End)
+                text_edit.setTextCursor(cursor)
+        except Exception:
             pass
 
     def refresh_topics_list(self):
