@@ -1,5 +1,6 @@
 import os
 from PySide6.QtCore import QObject
+from external.rqtll_widgets.forms.ui_form import Ui_Widget as Ui_BaseForm
 from external.rqtll_widgets.forms.g1_ui_text_editor import Ui_Widget as Ui_G1
 from external.rqtll_widgets.forms.g2_ui_compiler import Ui_Widget as Ui_G2
 from external.rqtll_widgets.forms.g3_ui_twist_controller import Ui_Widget as Ui_G3
@@ -18,6 +19,7 @@ from .rviz_launcher import RvizLauncherController
 from .gz_launcher import GzLauncherController
 from .rqt_launcher import RqtLauncherController
 from .package_manager import PackageManagerController
+from .nodes_visualizer import NodesVisualizerController
 
 class IDEController(QObject):
     def __init__(self, root_controller, ws_path):
@@ -47,6 +49,7 @@ class IDEController(QObject):
             "Gazebo": GzLauncherController(self),
             "rqt": RqtLauncherController(self),
             "Gestor de paquetes": PackageManagerController(self.root, None),
+            "Visualizador de Nodos": NodesVisualizerController(self),
         }
 
         # Mapping targets to UI form classes
@@ -59,6 +62,7 @@ class IDEController(QObject):
             "Gazebo": Ui_G6,
             "rqt": Ui_G7,
             "Gestor de paquetes": Ui_G8,
+            "Visualizador de Nodos": Ui_BaseForm,
         }
 
     def start(self):
@@ -198,7 +202,7 @@ class IDEController(QObject):
         try:
             ui.nav.code.clicked.connect(lambda: self.switch_view("Editor", add_daemon=True, add_tab=True))
             ui.nav.launch.clicked.connect(lambda: self.switch_view("Lanzador", add_daemon=True, add_tab=False))
-            #ui.nav.graph.clicked.connect(lambda: self.switch_view("nodes"))
+            ui.nav.graph.clicked.connect(lambda: self.switch_view("Visualizador de Nodos", add_daemon=True, add_tab=False))
             ui.nav.teleop.clicked.connect(lambda: self.switch_view("Control", add_daemon=True, add_tab=False))
             ui.nav.ssh.clicked.connect(lambda: self.switch_view("SSH", add_daemon=True, add_tab=False))
             ui.nav.viz.clicked.connect(lambda: self.switch_view("RViz2", add_daemon=True, add_tab=False))
