@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QHBoxLayout,
     QVBoxLayout,
+    QGraphicsItem,
 )
 from PySide6.QtGui import QTextCursor
 from PySide6.QtSvg import QSvgGenerator
@@ -107,6 +108,7 @@ class TopicSubscriptionWorker(QThread):
         self.topic_name = topic_name
         self.message_type = message_type
         self.stream = None
+        self.running = True
 
     def run(self):
         try:
@@ -116,11 +118,16 @@ class TopicSubscriptionWorker(QThread):
             )
             self.stream = self.stub.Subscribe(request)
             for response in self.stream:
+                if not self.running:
+                    break
                 self.message_received.emit(response)
         except Exception:
             pass
+        finally:
+            self.cancel()
 
     def cancel(self):
+        self.running = False
         if self.stream:
             try:
                 self.stream.cancel()
@@ -967,6 +974,16 @@ class NodesVisualizerController(QObject):
                 file_path += ".png"
                 ext = ".png"
 
+        # Temporarily disable caching for all items in the scene to output vector representations
+        saved_caches = {}
+        scene = self.viewer.scene() if self.viewer else None
+        if scene:
+            for item in scene.items():
+                orig_cache = item.cacheMode()
+                if orig_cache != QGraphicsItem.CacheMode.NoCache:
+                    saved_caches[item] = orig_cache
+                    item.setCacheMode(QGraphicsItem.CacheMode.NoCache)
+
         try:
             if ext == ".svg":
                 generator = QSvgGenerator()
@@ -988,3 +1005,10 @@ class NodesVisualizerController(QObject):
         except Exception as exc:
             if self.overlay:
                 self.overlay.set_message("Exportar grafo", f"No se pudo guardar la imagen:\n{exc}")
+        finally:
+            # Restore original cache modes
+            for item, orig_cache in saved_caches.items():
+                try:
+                    item.setCacheMode(orig_cache)
+                except Exception:
+                    pass
