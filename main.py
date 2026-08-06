@@ -31,9 +31,10 @@ import system_utils_pb2_grpc
 
 from PySide6.QtWidgets import (QApplication, QSystemTrayIcon, QMenu,
                                QPushButton, QToolButton, QTreeWidgetItem,
-                               QListWidgetItem, QTableWidgetItem, QLabel)
+                               QListWidgetItem, QTableWidgetItem, QLabel,
+                               QFileDialog, QWidget, QGraphicsView)
 from PySide6.QtGui import QFontDatabase, QIcon, QGuiApplication, QAction, QPixmap
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QObject, QEvent, QPoint, QRect
 
 # Monkeypatching for dynamic icon reloading on theme change
 original_add_file = QIcon.addFile
@@ -135,6 +136,160 @@ def load_resources(app, components_path, theme="dark.qss"):
     if os.path.exists(qss_file):
         with open(qss_file, "r") as f:
             app.setStyleSheet(f.read())
+
+class GlobalScreenshotFilter(QObject):
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.KeyPress:
+            if event.key() == Qt.Key_F12 or (event.key() == Qt.Key_S and event.modifiers() == (Qt.ControlModifier | Qt.ShiftModifier)):
+                self.capture_active_window()
+                return True
+        return super().eventFilter(obj, event)
+
+    def capture_active_window(self):
+        active_window = QApplication.activeWindow()
+        if not active_window:
+            return
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            active_window,
+            "Guardar captura de pantalla vectorial (SVG)",
+            os.path.expanduser("~/captura.svg"),
+            "Vector Graphics (*.svg)"
+        )
+        if not file_path:
+            return
+
+        from PySide6.QtSvg import QSvgGenerator
+        from PySide6.QtGui import QPainter
+        
+        widgets = [active_window] + active_window.findChildren(QWidget)
+        saved_states = {}
+        saved_caches = {}
+        from PySide6.QtWidgets import QGraphicsItem
+        
+        for w in widgets:
+            if isinstance(w, QLabel):
+                pixmap_path = getattr(w, "_rqtll_pixmap_path", None)
+                if pixmap_path and w.pixmap():
+                    saved_states[w] = ('label', w.pixmap(), pixmap_path)
+                    w.setPixmap(QPixmap())
+            elif isinstance(w, (QPushButton, QToolButton)):
+                icon_path = getattr(w, "_rqtll_icon_path", None)
+                if icon_path and not w.icon().isNull():
+                    saved_states[w] = ('button', w.icon(), icon_path)
+                    w.setIcon(QIcon())
+            elif isinstance(w, QGraphicsView):
+                scene = w.scene()
+                if scene:
+                    for item in scene.items():
+                        orig_cache = item.cacheMode()
+                        if orig_cache != QGraphicsItem.CacheMode.NoCache:
+                            saved_caches[item] = orig_cache
+                            item.setCacheMode(QGraphicsItem.CacheMode.NoCache)
+
+        generator = QSvgGenerator()
+        generator.setFileName(file_path)
+        generator.setSize(active_window.size())
+        generator.setViewBox(active_window.rect())
+        generator.setTitle(f"RQTLL Captura: {active_window.windowTitle()}")
+        
+        painter = QPainter(generator)
+        active_window.render(painter, QPoint())
+
+        from PySide6.QtSvg import QSvgRenderer
+        
+        for w, (w_type, original_val, path) in saved_states.items():
+            if not os.path.exists(path):
+                continue
+            
+            renderer = QSvgRenderer(path)
+            if not renderer.isValid():
+                continue
+            
+            if w_type == 'label':
+                w_size = w.size()
+                p_size = getattr(w, "_rqtll_pixmap_size", w_size)
+                x = (w_size.width() - p_size.width()) // 2
+                y = (w_size.height() - p_size.height()) // 2
+                local_rect = QRect(x, y, p_size.width(), p_size.height())
+                target_rect = QRect(w.mapTo(active_window, local_rect.topLeft()), local_rect.size())
+                renderer.render(painter, target_rect)
+                
+            elif w_type == 'button':
+                w_size = w.size()
+                icon_size = w.iconSize()
+                x = (w_size.width() - icon_size.width()) // 2
+                y = (w_size.height() - icon_size.height()) // 2
+                local_rect = QRect(x, y, icon_size.width(), icon_size.height())
+                target_rect = QRect(w.mapTo(active_window, local_rect.topLeft()), local_rect.size())
+                renderer.render(painter, target_rect)
+
+        painter.end()
+
+        for w, (w_type, original_val, path) in saved_states.items():
+            if w_type == 'label':
+                w.setPixmap(original_val)
+            elif w_type == 'button':
+                w.setIcon(original_val)
+
+        for item, orig_cache in saved_caches.items():
+            try:
+                item.setCacheMode(orig_cache)
+            except RuntimeError:
+                pass
+
+        import base64
+        css_parts = []
+        fonts_path = os.path.join(os.path.dirname(__file__), "external/rqtll_components/assets/fonts")
+        if os.path.exists(fonts_path):
+            for root, dirs, files in os.walk(fonts_path):
+                for file in files:
+                    if file.endswith((".ttf", ".otf")):
+                        font_name = os.path.splitext(file)[0]
+                        font_format = "truetype" if file.endswith(".ttf") else "opentype"
+                        full_path = os.path.join(root, file)
+                        try:
+                            with open(full_path, "rb") as f:
+                                b64_data = base64.b64encode(f.read()).decode("utf-8")
+                            font_family_main = font_name.split("-")[0]
+                            font_weight = "normal"
+                            if "bold" in font_name.lower():
+                                font_weight = "bold"
+                            elif "light" in font_name.lower():
+                                font_weight = "300"
+                            elif "medium" in font_name.lower():
+                                font_weight = "500"
+                            
+                            css_parts.append(f"""
+@font-face {{
+    font-family: '{font_name}';
+    src: url(data:font/{font_format};charset=utf-8;base64,{b64_data}) format('{font_format}');
+}}
+@font-face {{
+    font-family: '{font_family_main}';
+    font-weight: {font_weight};
+    src: url(data:font/{font_format};charset=utf-8;base64,{b64_data}) format('{font_format}');
+}}
+""")
+                        except Exception as e:
+                            print(f"Error encoding font {file}: {e}")
+        
+        fonts_css = "".join(css_parts)
+        if fonts_css:
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                idx = content.find("<svg")
+                if idx != -1:
+                    close_idx = content.find(">", idx)
+                    if close_idx != -1:
+                        style_block = f'\n<defs>\n<style type="text/css"><![CDATA[\n{fonts_css}\n]]></style>\n</defs>\n'
+                        new_content = content[:close_idx+1] + style_block + content[close_idx+1:]
+                        with open(file_path, "w", encoding="utf-8") as f:
+                            f.write(new_content)
+            except Exception as e:
+                print(f"Failed to embed fonts in SVG: {e}")
+
 
 class RQTLLRoot:
     def __init__(self, theme="dark.qss"):
@@ -246,6 +401,9 @@ if __name__ == "__main__":
     theme = QGuiApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark and "dark.qss" or "light.qss"
     components_path = os.path.join(os.path.dirname(__file__), "external/rqtll_components")
     load_resources(app, components_path, theme)
+
+    screenshot_filter = GlobalScreenshotFilter()
+    app.installEventFilter(screenshot_filter)
 
     from intern.compiler import update_terminal_colors
     update_terminal_colors("dark" if theme == "dark.qss" else "light")
