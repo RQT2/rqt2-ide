@@ -17,10 +17,13 @@ Entorno de Desarrollo Integrado (IDE) diseñado en PySide6 para ROS 2 (Robot Ope
       - [Recomendados](#recomendados)
     - [Instalación](#instalación)
     - [Ejecución](#ejecución)
-  - [Capturas de Pantalla](#capturas-de-pantalla)
   - [Estructura del Repositorio](#estructura-del-repositorio)
   - [Controladores Internos](#controladores-internos)
   - [Consumo de API y Recursos](#consumo-de-api-y-recursos)
+  - [Capturas de Pantalla](#capturas-de-pantalla)
+    - [Asistente de instalación](#asistente-de-instalación)
+    - [Pantalla de bienvenida](#pantalla-de-bienvenida)
+    - [Espacios de trabajo](#espacios-de-trabajo)
   - [Cómo contribuir](#cómo-contribuir)
   - [Security](#security)
   - [License](#license)
@@ -62,12 +65,6 @@ Asegúrate de que el backend (`rqtll-service`) esté en ejecución y luego inici
 ```bash
 python3 main.py
 ```
-
----
-
-## Capturas de Pantalla
-
-La interfaz sigue las [Material Design Rules](https://m3.material.io/foundations/overview/principles) y [GNOME Human Interface Guidelines](https://developer.gnome.org/hig/) para el diseño de interfaces de usuario.
 
 ---
 
@@ -115,6 +112,132 @@ La IDE divide su lógica en controladores modulares asíncronos alojados bajo `i
 - **rqtll-api**: gRPC es el canal exclusivo para comunicarse con el sistema operativo y ROS 2. La IDE actúa como cliente gRPC y consume stubs asíncronos generados a partir de los archivos `.proto`.
 - **rqtll-widgets**: Proporciona las plantillas de ventanas Qt Designer y las utilidades compartidas (como `base_window.py` y `graph.py`).
 - **rqtll-components**: Aporta los archivos `.qss` de hojas de estilo (Light y Dark) y el catálogo de iconos vectoriales SVG. Los colores se cargan de forma dinámica basándose en la configuración de `palette.json`.
+
+---
+
+## Capturas de Pantalla
+
+La interfaz sigue las [Material Design Rules](https://m3.material.io/foundations/overview/principles) y [GNOME Human Interface Guidelines](https://developer.gnome.org/hig/) para el diseño de interfaces de usuario.
+
+
+### Asistente de instalación
+
+El asistente de instalación ayuda a configurar el entorno de desarrollo. Consta de 3 pasos:
+
+1. **Configuración de repositorios**: Se encarga de habilitar los `software-properties-common` y `universe` repositories de Ubuntu y agregar los repositorios de ROS 2.
+2. **Instalación de ROS 2**: Se encarga de instalar ROS 2 acorde a la versión de Ubuntu y la seleccionada por el usuario (por ejemplo, `ROS 2 Humble Core` o `ROS 2 Lyrical Desktop Full`).
+3. **Configuración post-instalación**: Se encarga de configurar microROS acorde a la versión de Ubuntu; en caso de que se haya seleccionado, también se encarga de configurar la shell y el firewall de Ubuntu para cargar las herramientas de ROS 2 al abrir una terminal nueva y permitir la comunicación con múltiples máquinas.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A1-WIZARD-1D.webp">
+  <source media="(prefers-color-scheme: light)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/light/web/A1-WIZARD-1L.webp">
+  <img alt="Asistente de Instalación" src= "https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A1-WIZARD-1D.webp" width="49%" height="auto">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A1-WIZARD-3D.webp">
+  <source media="(prefers-color-scheme: light)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/light/web/A1-WIZARD-3L.webp">
+  <img alt="Instalación de ROS 2" src= "https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A1-WIZARD-3D.webp" width="49%" height="auto">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A1-WIZARD-4D.webp">
+  <source media="(prefers-color-scheme: light)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/light/web/A1-WIZARD-4L.webp">
+  <img alt="Instalación de ROS 2" src= "https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A1-WIZARD-4D.webp" width="49%" height="auto">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A1-WIZARD-5D.webp">
+  <source media="(prefers-color-scheme: light)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/light/web/A1-WIZARD-5L.webp">
+  <img alt="Post-instalación" src= "https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A1-WIZARD-5D.webp" width="49%" height="auto">
+</picture>
+
+### Pantalla de bienvenida
+
+La pantalla de bienvenida permite crear, abrir y clonar espacios de trabajo, ademas de acceder al gestor de paquetes apt y la página de documentación de RQTLL.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A2-START-1D.webp">
+  <source media="(prefers-color-scheme: light)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/light/web/A2-START-1L.webp">
+  <img alt="Pantalla de bienvenida" src= "https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A2-START-1D.webp" width="100%" height="auto">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A2-START-3D.webp">
+  <source media="(prefers-color-scheme: light)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/light/web/A2-START-3L.webp">
+  <img alt="Crear espacio de trabajo" src= "https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A2-START-3D.webp" width="64%" height="auto">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A2-START-4D.webp">
+  <source media="(prefers-color-scheme: light)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/light/web/A2-START-4L.webp">
+  <img alt="Clonación de espacio de trabajo" src= "https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A2-START-4D.webp" width="35%" height="auto">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A2-START-2D.webp">
+  <source media="(prefers-color-scheme: light)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/light/web/A2-START-2L.webp">
+  <img alt="Gestor de paquetes" src= "https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A2-START-2D.webp" width="100%" height="auto">
+</picture>
+
+### Espacios de trabajo
+
+Los espacios de trabajo usan el mismo template que incluye un sistema de navegación lateral izquierdo para navegar entre las diferentes vistas del workspace:
+
+1. **Editor de texto y emulador de terminal**: Contiene un tree-view para navegar entre los archivos del workspace, el editor de código y el emulador de terminal para ejecutar comandos de ROS 2 y comandos de sistema.
+2. **Panel de control**: Contiene un dashboard para compilar, grabar, ejecutar y detener lanzadores y nodos del workspace e interactuar con tópicos de ROS 2.
+3. **Visualizador de nodos**: Visualiza los nodos y tópicos de ROS 2 en un grafo de nodos estilo Blender.
+4. **SSH Manager**: Permite conectarse a máquinas remotas.
+5. **Lanzadores**: Multiples ventanas para iniciar conexiones a RViz2, Gazebo Sim y rqt.
+6. **Gestor de paquetes**: Permite instalar paquetes de apt.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A3-WORKSPACE-1D.webp">
+  <source media="(prefers-color-scheme: light)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/light/web/A3-WORKSPACE-1L.webp">
+  <img alt="Editor de codigo" src= "https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A3-workspace-1D.webp" width="100%" height="auto">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A3-WORKSPACE-2D.webp">
+  <source media="(prefers-color-scheme: light)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/light/web/A3-WORKSPACE-2L.webp">
+  <img alt="Panel de control" src= "https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A3-workspace-2D.webp" width="100%" height="auto">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A3-WORKSPACE-3D.webp">
+  <source media="(prefers-color-scheme: light)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/light/web/A3-WORKSPACE-3L.webp">
+  <img alt="Visualizador de nodos" src= "https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A3-workspace-3D.webp" width="100%" height="auto">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A3-WORKSPACE-4D.webp">
+  <source media="(prefers-color-scheme: light)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/light/web/A3-WORKSPACE-4L.webp">
+  <img alt="SSH Manager" src= "https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A3-workspace-4D.webp" width="100%" height="auto">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A3-WORKSPACE-5D.webp">
+  <source media="(prefers-color-scheme: light)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/light/web/A3-WORKSPACE-5L.webp">
+  <img alt=" Lanzador de RViz2" src= "https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A3-workspace-5D.webp" width="100%" height="auto">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A3-WORKSPACE-6D.webp">
+  <source media="(prefers-color-scheme: light)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/light/web/A3-WORKSPACE-6L.webp">
+  <img alt="Lanzador de Gazebo Sim" src= "https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A3-workspace-6D.webp" width="100%" height="auto">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A3-WORKSPACE-7D.webp">
+  <source media="(prefers-color-scheme: light)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/light/web/A3-WORKSPACE-7L.webp">
+  <img alt="Lanzador de rqt" src= "https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A3-workspace-7D.webp" width="100%" height="auto">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A3-WORKSPACE-8D.webp">
+  <source media="(prefers-color-scheme: light)" srcset="https://github.com/RQTLL/rqtll-components/blob/main/releases/light/web/A3-WORKSPACE-8L.webp">
+  <img alt="Gestor de paquetes apt" src= "https://github.com/RQTLL/rqtll-components/blob/main/releases/dark/web/A3-workspace-8D.webp" width="100%" height="auto">
+</picture>
 
 ---
 
