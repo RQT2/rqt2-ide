@@ -398,6 +398,33 @@ class RQTLLRoot:
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    app.setDesktopFileName("rqtll.desktop")
+
+    from PySide6.QtNetwork import QLocalServer, QLocalSocket
+    socket_name = "rqtll_ide_single_instance_socket"
+    socket = QLocalSocket()
+    socket.connectToServer(socket_name)
+    if socket.waitForConnected(500):
+        socket.write(b"activate")
+        socket.waitForBytesWritten(1000)
+        sys.exit(0)
+
+    local_server = QLocalServer()
+    QLocalServer.removeServer(socket_name)
+    if local_server.listen(socket_name):
+        def handle_new_connection():
+            client_socket = local_server.nextPendingConnection()
+            if client_socket.waitForReadyRead(1000):
+                msg = client_socket.readAll().data()
+                if msg == b"activate":
+                    active_window = QApplication.activeWindow()
+                    if active_window:
+                        active_window.showNormal()
+                        active_window.raise_()
+                        active_window.activateWindow()
+            client_socket.close()
+        local_server.newConnection.connect(handle_new_connection)
+
     theme = QGuiApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark and "dark.qss" or "light.qss"
     components_path = os.path.join(os.path.dirname(__file__), "external/rqtll_components")
     load_resources(app, components_path, theme)
