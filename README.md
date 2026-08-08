@@ -26,6 +26,7 @@ Entorno de Desarrollo Integrado (IDE) diseñado en PySide6 para ROS 2 (Robot Ope
     - [Espacios de trabajo](#espacios-de-trabajo)
   - [Cómo contribuir](#cómo-contribuir)
   - [Security](#security)
+  - [Créditos y Agradecimientos](#créditos-y-agradecimientos)
   - [License](#license)
   - [Maintainers](#maintainers)
 
@@ -250,6 +251,10 @@ Los espacios de trabajo usan el mismo template que incluye un sistema de navegac
 ## Security
 
 Consulta [SECURITY.md](SECURITY.md) para conocer el procedimiento de reporte de vulnerabilidades.
+
+## Créditos y Agradecimientos
+
+El motor de visualización de grafos interactivos de esta IDE está basado y adaptado a partir del proyecto **[NodeGraphQt](https://github.com/jchanvfx/NodeGraphQt)** de **jchanvfx**, portando la lógica a PySide6 e integrándola con el diseño estilo Blender personalizado de RQTLL.
 
 ## License
 
