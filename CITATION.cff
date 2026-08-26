@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use RQTLL in your research, please cite it using these metadata."
+title: "RQTLL IDE"
+abstract: "Frontend Layer and IDE built with PySide6 for RQTLL"
+type: software
+version: 1.0.0
+date-released: 2026-08-10
+license: "MIT"
+authors:
+  - family-names: "de la Cruz Osorio"
+    given-names: "Adan Rodrigo"
+    orcid: "https://orcid.org/0009-0003-3907-0663"
+  - family-names: "Garcia"
+    given-names: "Francesco"
+    orcid: "https://orcid.org/0000-0002-8571-914X"
+repository-code: "https://github.com/RQTLL/rqtll-ide"
+url: "https://rqtll.github.io/"
